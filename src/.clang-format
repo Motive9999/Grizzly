@@ -1,0 +1,36 @@
+BasedOnStyle:                              LLVM
+
+IndentWidth:                               8
+TabWidth:                                  4
+UseTab:                                    Never
+ColumnLimit:                               90
+
+SortIncludes:                              false
+PointerAlignment:                          Right
+
+AllowShortIfStatementsOnASingleLine:       Never
+AllowShortFunctionsOnASingleLine:          None
+AllowShortBlocksOnASingleLine:             Never
+
+BinPackArguments:                          false
+BinPackParameters:                         false
+AllowAllArgumentsOnNextLine:               true
+AllowAllParametersOfDeclarationOnNextLine: true
+
+AlignAfterOpenBracket:                     DontAlign
+ContinuationIndentWidth:                   4
+
+AlignConsecutiveAssignments:               Consecutive
+AlignConsecutiveDeclarations:              Consecutive
+AlignConsecutiveMacros:                    Consecutive
+AlignOperands:                             DontAlign
+
+BreakBeforeBinaryOperators:                None
+BreakBeforeTernaryOperators:               true
+
+PenaltyBreakAssignment:                    1000
+PenaltyBreakBeforeFirstCallParameter:      1000
+PenaltyBreakOpenParenthesis:               1000
+
+MaxEmptyLinesToKeep:                       2
+IndentCaseLabels:                          true
