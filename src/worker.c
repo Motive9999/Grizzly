@@ -4,29 +4,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #define DEPTH_LIMIT (MAX_PLIES - 1)
+
 extern uint64_t perft(Board *board, unsigned depth);
 WorkerPool      SearchWorkerPool;
 static int      Reductions[2][256];
 int             Pruning[2][16];
-const double    BestmoveTypeScale[BM_TYPE_NB] = {
-    0.20, 0.45, 0.50, 0.85, 0.95, 1.00, 1.20, 1.40};
+const double    BestmoveTypeScale[BM_TYPE_NB] = {0.20, 0.45, 0.50, 0.85, 0.95, 1.00, 1.20, 1.40};
 const double BestmoveStabilityScale[5] = {2.50, 1.20, 0.90, 0.80, 0.75};
+
 static void  die(const char *m) {
         perror(m);
         exit(EXIT_FAILURE);
 }
+
 INLINED clock_t timemin(clock_t l, clock_t r) {
         return l < r ? l : r;
 }
+
 double score_difference_scale(score_t s) {
         return pow(2.0, iclamp(s, -100, 100) / 100.0);
 }
+
 int lmr_base_value(int depth, int moves, bool improving, bool quiet) {
         return (-415 + Reductions[quiet][depth] * Reductions[quiet][moves] +
                    !improving * 538) /
             1024;
 }
+
 void init_search_tables(void) {
         for (int i = 1; i < 256; ++i) {
                 Reductions[0][i] = (int)(log(i) * 10.81 + 4.15);
@@ -37,11 +43,13 @@ void init_search_tables(void) {
                 Pruning[0][d] = -1.27 + 2.49 * pow(d, 0.60);
         }
 }
+
 void init_searchstack(Searchstack *ss) {
         memset(ss, 0, sizeof(Searchstack) * 256);
         for (int i = 0; i < 256; ++i)
                 (ss + i)->plies = i - 4;
 }
+
 void update_pv(move_t *pv, move_t best, move_t *sub) {
         pv[0] = best;
         size_t i;
@@ -49,6 +57,7 @@ void update_pv(move_t *pv, move_t best, move_t *sub) {
                 pv[i + 1] = sub[i];
         pv[i + 1] = NO_MOVE;
 }
+
 void timeman_init(const Board *b, Timeman *tm, SearchParams *p, clock_t start) {
         clock_t oh         = UciOptionFields.moveOverhead;
         tm->start          = start;
@@ -86,6 +95,7 @@ void timeman_init(const Board *b, Timeman *tm, SearchParams *p, clock_t start) {
         tm->stability    = 0;
         tm->type         = NO_BM_TYPE;
 }
+
 void timeman_update(Timeman *tm,
     const Board             *b,
     move_t                   best,
@@ -124,6 +134,7 @@ void timeman_update(Timeman *tm,
             (clock_t)fmin(tm->averageTime * scale, tm->averageTime * 4.0));
         debug_printf("info optimal_time %" FMT_INFO "\n", (info_t)tm->optimalTime);
 }
+
 void check_time(void) {
         if (--SearchWorkerPool.checks > 0)
                 return;
@@ -134,9 +145,11 @@ void check_time(void) {
             timeman_must_stop_search(&SearchTimeman, chess_clock()))
                 wpool_stop(&SearchWorkerPool);
 }
+
 INLINED int rtm_greater(RootMove *r, RootMove *l) {
         return r->score != l->score ? r->score > l->score : r->prevScore > l->prevScore;
 }
+
 void sort_root_moves(RootMove *begin, RootMove *end) {
         for (int i = 1; i < (int)(end - begin); ++i) {
                 RootMove tmp = begin[i];
@@ -148,12 +161,14 @@ void sort_root_moves(RootMove *begin, RootMove *end) {
                 begin[j + 1] = tmp;
         }
 }
+
 RootMove *find_root_move(RootMove *begin, RootMove *end, move_t move) {
         for (; begin < end; ++begin)
                 if (begin->move == move)
                         return begin;
         return NULL;
 }
+
 void worker_init(Worker *w, size_t idx) {
         w->idx       = idx;
         w->stack     = NULL;
@@ -165,6 +180,7 @@ void worker_init(Worker *w, size_t idx) {
             pthread_create(&w->thread, &WorkerSettings, &worker_entry, w))
                 die("Worker initialization failed");
 }
+
 void worker_destroy(Worker *w) {
         w->exit = true;
         worker_start_search(w);
@@ -173,6 +189,7 @@ void worker_destroy(Worker *w) {
         pthread_mutex_destroy(&w->mutex);
         pthread_cond_destroy(&w->condVar);
 }
+
 void worker_reset(Worker *w) {
         memset(w->bfHistory, 0, sizeof(butterfly_history_t));
         memset(w->ctHistory, 0, sizeof(continuation_history_t));
@@ -180,18 +197,21 @@ void worker_reset(Worker *w) {
         memset(w->capHistory, 0, sizeof(capture_history_t));
         w->verifPlies = 0;
 }
+
 void worker_start_search(Worker *w) {
         pthread_mutex_lock(&w->mutex);
         w->searching = true;
         pthread_cond_signal(&w->condVar);
         pthread_mutex_unlock(&w->mutex);
 }
+
 void worker_wait_search_end(Worker *w) {
         pthread_mutex_lock(&w->mutex);
         while (w->searching)
                 pthread_cond_wait(&w->condVar, &w->mutex);
         pthread_mutex_unlock(&w->mutex);
 }
+
 void *worker_entry(void *ptr) {
         Worker *w = ptr;
         while (true) {
@@ -207,6 +227,7 @@ void *worker_entry(void *ptr) {
         }
         return NULL;
 }
+
 void wpool_init(WorkerPool *wp, size_t threads) {
         if (wp->size) {
                 worker_wait_search_end(wpool_main_worker(wp));
@@ -231,16 +252,19 @@ void wpool_init(WorkerPool *wp, size_t threads) {
                 wpool_reset(wp);
         }
 }
+
 void wpool_new_search(WorkerPool *wp) {
         for (size_t i = 0; i < wp->size; ++i)
                 wp->workerList[i]->verifPlies = 0;
         wp->checks = 1;
 }
+
 void wpool_reset(WorkerPool *wp) {
         for (size_t i = 0; i < wp->size; ++i)
                 worker_reset(wp->workerList[i]);
         wp->checks = 1;
 }
+
 void wpool_start_search(WorkerPool *wp, const Board *root, const SearchParams *sp) {
         worker_wait_search_end(wpool_main_worker(wp));
         atomic_store_explicit(&wp->stop, false, memory_order_relaxed);
@@ -265,14 +289,17 @@ void wpool_start_search(WorkerPool *wp, const Board *root, const SearchParams *s
         }
         worker_start_search(wpool_main_worker(wp));
 }
+
 void wpool_start_workers(WorkerPool *wp) {
         for (size_t i = 1; i < wp->size; ++i)
                 worker_start_search(wp->workerList[i]);
 }
+
 void wpool_wait_search_end(WorkerPool *wp) {
         for (size_t i = 1; i < wp->size; ++i)
                 worker_wait_search_end(wp->workerList[i]);
 }
+
 uint64_t wpool_get_total_nodes(WorkerPool *wp) {
         uint64_t total = 0;
         for (size_t i = 0; i < wp->size; ++i)
@@ -280,6 +307,7 @@ uint64_t wpool_get_total_nodes(WorkerPool *wp) {
                     memory_order_relaxed);
         return total;
 }
+
 void main_worker_search(Worker *w) {
         Board *b = &w->board;
         if (UciSearchParams.perft) {
@@ -341,6 +369,7 @@ void main_worker_search(Worker *w) {
         free(w->rootMoves);
         free_boardstack(w->stack);
 }
+
 void worker_search(Worker *w) {
         Board      *b        = &w->board;
         const int   multiPv  = imin(UciOptionFields.multiPv, w->rootCount);
