@@ -76,17 +76,11 @@ void timeman_init(const Board *b, Timeman *tm, SearchParams *p, clock_t start) {
                         tm->averageTime += tm->averageTime / 4;
                 }
                 tm->optimalTime = tm->averageTime;
-                debug_printf("info maximal_time %" FMT_INFO " optimal_time %" FMT_INFO
-                             "\n",
-                    (info_t)tm->maximalTime,
-                    (info_t)tm->optimalTime);
         } else if (p->movetime) {
                 tm->mode        = Movetime;
                 tm->averageTime = tm->maximalTime = tm->optimalTime = (p->movetime <= oh)
                     ? 1
                     : (p->movetime - oh);
-                debug_printf("info maximal_time %" FMT_INFO "\n",
-                    (info_t)tm->maximalTime);
         } else {
                 tm->mode = NoTimeman;
         }
@@ -132,7 +126,6 @@ void timeman_update(Timeman *tm,
         tm->prevScore   = score;
         tm->optimalTime = timemin(tm->maximalTime,
             (clock_t)fmin(tm->averageTime * scale, tm->averageTime * 4.0));
-        debug_printf("info optimal_time %" FMT_INFO "\n", (info_t)tm->optimalTime);
 }
 
 void check_time(void) {

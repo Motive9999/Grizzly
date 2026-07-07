@@ -3,7 +3,6 @@
 #include <stdlib.h>
 
 #define SEARCH_DEPTH         35
-#define CURR_DISPLAY         18
 #define DISPLAY_PV           1
 
 #define RZR_MARGIN           135
@@ -241,9 +240,7 @@ static void update_capture_stats(const Board *b,
     int                                       d,
     move_t                                    bm,
     const move_t                             *c,
-    int                                       cc,
-    Searchstack                              *ss) {
-        (void)ss;
+    int                                       cc) {
         Worker *w     = get_worker(b);
         int     bonus = history_bonus(d);
         if (capture_or_promotion(b, bm))
@@ -578,13 +575,6 @@ main_loop:;
                                       : SEE_NOISY_PER_DEPTH2 * depth * depth))
                                 continue;
                 }
-                if (root && !w->idx && w->rootDepth >= CURR_DISPLAY) {
-                        printf("info depth %d currmove %s currmovenumber %d\n",
-                            depth,
-                            move_to_str(m, b->chess960),
-                            moves + w->pvLine);
-                        fflush(stdout);
-                }
                 Boardstack st;
                 int        ext      = 0;
                 int        newDepth = depth - 1;
@@ -694,8 +684,7 @@ main_loop:;
                                                     depth,
                                                     best,
                                                     caps,
-                                                    cc,
-                                                    ss);
+                                                    cc);
                                         break;
                                 }
                         }
