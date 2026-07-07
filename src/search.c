@@ -416,8 +416,10 @@ score_t search(bool isPV,
                 check_time();
         if (STOP)
                 return draw_score(w);
+
         if (isPV && w->seldepth < ss->plies + 1)
                 w->seldepth = ss->plies + 1;
+
         if (!root && game_is_drawn(b, ss->plies))
                 return draw_score(w);
         if (ss->plies >= MAX_PLIES)
@@ -435,11 +437,13 @@ score_t search(bool isPV,
         int       ttDepth = 0, ttBound = NO_BOUND;
         score_t   ttScore = NO_SCORE, eval;
         move_t    ttMove  = NO_MOVE;
+
         if (found) {
                 ttScore = score_from_tt(e->score, ss->plies);
                 ttBound = e->genbound & 3;
                 ttDepth = e->depth;
                 ttMove  = e->bestmove;
+
                 if (ttDepth >= depth && !isPV && b->stack->rule50 < 96 &&
                     (abs(ttScore) < VICTORY || ttBound == EXACT_BOUND) &&
                     (((ttBound & LOWER_BOUND) && ttScore >= beta) ||
@@ -469,6 +473,7 @@ score_t search(bool isPV,
                 ttMove = w->rootMoves[w->pvLine].move;
         if (ss->plies >= 2)
                 improving = ss->staticEval > (ss - 2)->staticEval;
+
         if (!isPV && depth == 1 && ss->staticEval + RZR_MARGIN <= alpha)
                 return qsearch(false, b, alpha, beta, ss);
         if (!isPV && depth <= 8 &&
@@ -513,6 +518,7 @@ score_t search(bool isPV,
                                 break;
                         if (!move_is_legal(b, m) || m == ss->excludedMove)
                                 continue;
+
                         piece_t pc       = piece_on(b, from_sq(m));
                         ss->currentMove  = m;
                         ss->pieceHistory = &w->ctHistory[pc][to_sq(m)];
