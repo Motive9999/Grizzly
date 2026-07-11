@@ -5,14 +5,10 @@
 #define SEARCH_DEPTH         35
 #define DISPLAY_PV           1
 
-#define RZR_MARGIN           135
 #define RFP_MARGIN_PER_DEPTH 85
 #define RFP_IMPROVING_BONUS  73
 #define FP_BASE_MARGIN       186
 #define FP_DEPTH_MARGIN      67
-
-#define CHP_BASE             421
-#define CHP_DEPTH_SCALE      2839
 
 #define SEE_QUIET_PER_DEPTH  -49
 #define SEE_NOISY_PER_DEPTH2 -22
@@ -219,10 +215,6 @@ static void update_quiet_stats(const Board *b,
         int      bonus = history_bonus(d);
         piece_t  pc    = piece_on(b, from_sq(bm));
         square_t to    = to_sq(bm);
-        if ((ss - 1)->pieceHistory) {
-                square_t lto                        = to_sq((ss - 1)->currentMove);
-                w->cmHistory[piece_on(b, lto)][lto] = bm;
-        }
         add_bf_history(w->bfHistory, pc, bm, bonus);
         upd_cont(ss, d, pc, to, true);
         if (ss->killers[0] != bm) {
@@ -296,8 +288,7 @@ static void movepicker_setup(Movepicker *mp,
                 mp->stage = PICK_TT +
                     !(tt && (!qs || capture_or_promotion(b, tt)) &&
                         move_pseudo_legal(b, tt));
-        square_t lto = (ss - 1)->pieceHistory ? to_sq((ss - 1)->currentMove) : SQ_NONE;
-        mp->counter  = lto != SQ_NONE ? w->cmHistory[piece_on(b, lto)][lto] : NO_MOVE;
+        mp->counter = NO_MOVE;
         mp->pieceHistory[0] = (ss - 1)->pieceHistory;
         mp->pieceHistory[1] = (ss - 2)->pieceHistory;
 }
@@ -347,10 +338,6 @@ top:
                         FALL;
                 case PICK_COUNTER:
                         ++mp->stage;
-                        if (mp->counter && mp->counter != mp->ttMove &&
-                            mp->counter != mp->killer1 && mp->counter != mp->killer2 &&
-                            move_pseudo_legal(mp->board, mp->counter))
-                                return mp->counter;
                         FALL;
                 case GEN_QUIET:
                         ++mp->stage;
@@ -364,7 +351,7 @@ top:
                                 place_top_move(mp->cur, mp->list.last);
                                 move_t m = (mp->cur++)->move;
                                 if (m != mp->ttMove && m != mp->killer1 &&
-                                    m != mp->killer2 && m != mp->counter)
+                                    m != mp->killer2)
                                         return m;
                         }
                         ++mp->stage;
@@ -474,8 +461,6 @@ score_t search(bool isPV,
         if (ss->plies >= 2)
                 improving = ss->staticEval > (ss - 2)->staticEval;
 
-        if (!isPV && depth == 1 && ss->staticEval + RZR_MARGIN <= alpha)
-                return qsearch(false, b, alpha, beta, ss);
         if (!isPV && depth <= 8 &&
             eval - RFP_MARGIN_PER_DEPTH * depth + RFP_IMPROVING_BONUS * improving >=
                 beta &&
@@ -570,10 +555,6 @@ main_loop:;
                         if (depth <= 7 && !inCheck && quiet &&
                             eval + FP_BASE_MARGIN + FP_DEPTH_MARGIN * depth <= alpha)
                                 skipQ = true;
-                        if (depth <= 4 &&
-                            cont_score(b, ss, m) <
-                                CHP_BASE - CHP_DEPTH_SCALE * (depth - 1))
-                                continue;
                         if (depth <= 12 && (!quiet || moves > 4) &&
                             !see_greater_than(b,
                                 m,
@@ -606,13 +587,7 @@ main_loop:;
                                     cut);
                                 ss->excludedMove = NO_MOVE;
                                 if (sScore < sBeta) {
-                                        if (!isPV && sBeta - sScore > 17 &&
-                                            ss->doubleExtensions <= 9) {
-                                                ext = 2;
-                                                ss->doubleExtensions++;
-                                        } else {
-                                                ext = 1;
-                                        }
+                                        ext = 1;
                                 } else if (sBeta >= beta) {
                                         return sBeta;
                                 }
@@ -628,7 +603,7 @@ main_loop:;
                 if (lmr) {
                         R = lmr_base_value(depth, moves, improving, quiet);
                         R += !isPV + cut;
-                        R -= (m == mp.killer1 || m == mp.killer2 || m == mp.counter);
+                        R -= (m == mp.killer1 || m == mp.killer2);
                         R -= quiet && !see_greater_than(b, reverse_move(m), 0);
                         R -= iclamp(hist / LMR_HIST_DIV, -3, 3);
                         R = iclamp(R, 0, newDepth - 1);

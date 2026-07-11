@@ -4,7 +4,8 @@
 
 # Grizzly
 
-A UCI compliant chess engine in C with NNUE evaluation.
+A compact UCI compliant chess engine in C with NNUE evaluation.
+
 
 </div>
 
