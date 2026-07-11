@@ -8,13 +8,15 @@
 #define DEPTH_LIMIT (MAX_PLIES - 1)
 
 extern uint64_t perft(Board *board, unsigned depth);
+
 WorkerPool      SearchWorkerPool;
 static int      Reductions[2][256];
 int             Pruning[2][16];
-const double    BestmoveTypeScale[BM_TYPE_NB] = {0.20, 0.45, 0.50, 0.85, 0.95, 1.00, 1.20, 1.40};
-const double BestmoveStabilityScale[5] = {2.50, 1.20, 0.90, 0.80, 0.75};
 
-static void  die(const char *m) {
+const double    BestmoveTypeScale[BM_TYPE_NB] = {0.20, 0.45, 0.50, 0.85, 0.95, 1.00, 1.20, 1.40};
+const double    BestmoveStabilityScale[5] = {2.50, 1.20, 0.90, 0.80, 0.75};
+
+static void die(const char *m) {
         perror(m);
         exit(EXIT_FAILURE);
 }
@@ -165,11 +167,9 @@ RootMove *find_root_move(RootMove *begin, RootMove *end, move_t move) {
 void worker_init(Worker *w, size_t idx) {
         w->idx       = idx;
         w->stack     = NULL;
-        w->pawnTable = calloc(PawnTableSize, sizeof(PawnEntry));
         w->exit      = false;
         w->searching = true;
-        if (!w->pawnTable || pthread_mutex_init(&w->mutex, NULL) ||
-            pthread_cond_init(&w->condVar, NULL) ||
+        if (pthread_mutex_init(&w->mutex, NULL) || pthread_cond_init(&w->condVar, NULL) ||
             pthread_create(&w->thread, &WorkerSettings, &worker_entry, w))
                 die("Worker initialization failed");
 }
@@ -178,7 +178,6 @@ void worker_destroy(Worker *w) {
         w->exit = true;
         worker_start_search(w);
         pthread_join(w->thread, NULL);
-        free(w->pawnTable);
         pthread_mutex_destroy(&w->mutex);
         pthread_cond_destroy(&w->condVar);
 }
@@ -397,16 +396,9 @@ void worker_search(Worker *w) {
                             : pvScore >= beta                 ? LOWER_BOUND
                             : pvScore <= alpha                ? UPPER_BOUND
                                                               : EXACT_BOUND;
-                        if (bound == EXACT_BOUND)
-                                sort_root_moves(w->rootMoves, w->rootMoves + multiPv);
-                        search_print_root_info(b,
-                            w,
-                            multiPv,
-                            iter,
-                            chess_clock() - SearchTimeman.start,
-                            bound);
                         if (aborted)
                                 break;
+
                         if (bound == UPPER_BOUND) {
                                 ++aspFails;
                                 depth = iter;
@@ -421,6 +413,15 @@ void worker_search(Worker *w) {
                                 delta += delta * 79 / 256;
                                 goto retry;
                         }
+
+                        sort_root_moves(w->rootMoves, w->rootMoves + multiPv);
+
+                        search_print_root_info(b,
+                        w,
+                        w->pvLine + 1,
+                        iter,
+                        chess_clock() - SearchTimeman.start,
+                        EXACT_BOUND);
                 }
                 for (RootMove *i = w->rootMoves; i < w->rootMoves + w->rootCount; ++i) {
                         i->prevScore = i->score;

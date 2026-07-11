@@ -104,23 +104,27 @@ const char *score_to_str(score_t score) {
         return buf;
 }
 
-void print_pv(const Board *board, RootMove *rootMove, int multiPv, int depth, clock_t time, int bound) {
+void search_print_root_info(
+    Board *board, Worker *worker, int multiPv, int depth, clock_t time, int bound) {
+        RootMove *rootMove = &worker->rootMoves[worker->pvLine];
         static const char *BoundStr[] = {"", " upperbound", " lowerbound", ""};
         uint64_t nodes        = wpool_get_total_nodes(&SearchWorkerPool);
         uint64_t nps          = nodes / (time + !time) * 1000;
         bool     searchedMove = (rootMove->score != -INF_SCORE);
         score_t  rootScore    = searchedMove ? rootMove->score : rootMove->prevScore;
-        char     pvBuffer[256 * 5 + 16 + 1];
-        pvBuffer[0] = '\0';
-        for (size_t i = 0; rootMove->pv[i]; ++i) {
-                strcat(pvBuffer, " ");
-                strcat(pvBuffer, move_to_str(rootMove->pv[i], board->chess960));
-        }
+        const char *pv = rootMove->pv[0]
+            ? move_to_str(rootMove->pv[0], board->chess960)
+            : "";
         printf("info depth %d seldepth %d multipv %d score %s%s%s nodes %" FMT_INFO
-               " nps %" FMT_INFO " hashfull %d time %" FMT_INFO " pv%s\n",
+               " nps %" FMT_INFO " hashfull %d time %" FMT_INFO " pv%s%s\n",
                imax(depth + searchedMove, 1), rootMove->seldepth, multiPv,
                score_to_str(rootScore), BoundStr[bound], score_to_wdl(rootScore, board->ply),
-               (info_t)nodes, (info_t)nps, tt_hashfull(), (info_t)time, pvBuffer);
+               (info_t)nodes,
+               (info_t)nps,
+               tt_hashfull(),
+               (info_t)time,
+               *pv ? " " : "",
+               pv);
         fflush(stdout);
 }
 

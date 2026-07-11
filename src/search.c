@@ -1,14 +1,15 @@
 #include "defs.h"
-#include <stdio.h>
 #include <stdlib.h>
 
-#define SEARCH_DEPTH         35
-#define DISPLAY_PV           1
-
+#define SEARCH_DEPTH         32
+#define RZR_MARGIN           135
 #define RFP_MARGIN_PER_DEPTH 85
 #define RFP_IMPROVING_BONUS  73
 #define FP_BASE_MARGIN       186
 #define FP_DEPTH_MARGIN      67
+
+#define CHP_BASE             421
+#define CHP_DEPTH_SCALE      2839
 
 #define SEE_QUIET_PER_DEPTH  -49
 #define SEE_NOISY_PER_DEPTH2 -22
@@ -16,140 +17,53 @@
 #define LMR_HIST_DIV         6307
 #define QFP_BASE             110
 
-#define FALL          __attribute__((fallthrough))
-#define STOP          wpool_is_stopped(&SearchWorkerPool)
-#define NODE          atomic_fetch_add_explicit(&w->nodes, 1, memory_order_relaxed)
-#define TTS(x)        score_to_tt(x, ss->plies)
-#define ZWS(d, b2, c) (-search(false, b, (d), -(b2), 1 - (b2), ss + 1, (c)))
+#define FALL              __attribute__((fallthrough))
+#define STOP              wpool_is_stopped(&SearchWorkerPool)
+#define NODE              atomic_fetch_add_explicit(&w->nodes, 1, memory_order_relaxed)
+#define ZWS(d, beta, cut) (-search(false, b, (d), -(beta), 1 - (beta), ss + 1, (cut)))
+#define TTS(s)            score_to_tt((s), ss->plies)
 
-extern int Pruning[2][16];
+extern TranspositionTable SearchTT;
+extern int                Pruning[2][16];
 
 extern int  lmr_base_value(int depth, int moves, bool improving, bool quiet);
 extern void update_pv(move_t *pv, move_t best, move_t *sub);
 
-TranspositionTable SearchTT = {0, NULL, 0};
-
-typedef struct {
-        size_t    start, end;
-        pthread_t thread;
-} BzeroThread;
-
-static void die(const char *what) {
-        perror(what);
-        exit(EXIT_FAILURE);
-}
-
-static int tt_relevance(const TT_Entry *e) {
-        return e->depth - ((259 + SearchTT.generation - e->genbound) & 0xFC);
-}
-
-static void *tt_bzero_thread(void *data) {
-        BzeroThread   *td   = data;
-        const TT_Entry zero = {0, NO_SCORE, NO_SCORE, 0, 0, NO_MOVE};
-
-        for (size_t i = td->start; i < td->end; ++i)
-                for (size_t j = 0; j < ClusterSize; ++j)
-                        SearchTT.table[i].clEntry[j] = zero;
-        return NULL;
-}
-
-void tt_bzero(size_t threads) {
-        BzeroThread *tl = threads ? malloc(threads * sizeof(BzeroThread)) : NULL;
-        const size_t n  = SearchTT.clusterCount;
-
-        if (!tl)
-                die("TT zero failed");
-        for (size_t i = 0; i < threads; ++i) {
-                tl[i].start = n * (i + 0) / threads;
-                tl[i].end   = n * (i + 1) / threads;
-        }
-        for (size_t i = 1; i < threads; ++i)
-                if (pthread_create(&tl[i].thread, NULL, tt_bzero_thread, tl + i))
-                        die("TT zero thread failed");
-        tt_bzero_thread(tl);
-        for (size_t i = 1; i < threads; ++i)
-                pthread_join(tl[i].thread, NULL);
-        free(tl);
-}
-
-int tt_hashfull(void) {
-        const uint8_t gen   = SearchTT.generation;
-        int           count = 0;
-
-        for (int i = 0; i < 1000; ++i)
-                for (int j = 0; j < ClusterSize; ++j)
-                        count += (SearchTT.table[i].clEntry[j].genbound & 0xFC) == gen;
-        return count / ClusterSize;
-}
-
-void tt_resize(size_t mb) {
-        const size_t count = mb * 1024 * 1024 / sizeof(TT_Cluster);
-
-        free(SearchTT.table);
-        SearchTT.clusterCount = count;
-        SearchTT.table        = mb ? malloc(count * sizeof(TT_Cluster)) : NULL;
-        if (!mb)
-                return;
-        if (!SearchTT.table)
-                die("TT allocation failed");
-        tt_bzero((size_t)UciOptionFields.threads);
-}
-
-TT_Entry *tt_probe(hashkey_t key, bool *found) {
-        const uint8_t gen = SearchTT.generation;
-        TT_Entry     *e   = tt_entry_at(key);
-        TT_Entry     *rep = e;
-
-        for (int i = 0; i < ClusterSize; ++i)
-                if (!e[i].key || e[i].key == key) {
-                        e[i].genbound = (uint8_t)(gen | (e[i].genbound & 0x3));
-                        *found        = (bool)e[i].key;
-                        return e + i;
-                }
-        for (int i = 1; i < ClusterSize; ++i)
-                if (tt_relevance(rep) > tt_relevance(e + i))
-                        rep = e + i;
-        *found = false;
-        return rep;
-}
-
-void tt_save(TT_Entry *e, hashkey_t k, score_t s, score_t ev, int d, int b, move_t m) {
-        if (m || k != e->key)
-                e->bestmove = (uint16_t)m;
-        if (b != EXACT_BOUND && k == e->key && d + 4 < e->depth)
-                return;
-        e->key      = k;
-        e->score    = s;
-        e->eval     = ev;
-        e->genbound = SearchTT.generation | (uint8_t)b;
-        e->depth    = d;
-}
-
 static inline piecetype_t cap_type(const Board *b, move_t m) {
-        return move_type(m) == PROMOTION ? piece_type(promotion_type(m))
-            : move_type(m) == EN_PASSANT ? PAWN
-                                         : piece_type(piece_on(b, to_sq(m)));
+        if (move_type(m) == PROMOTION)
+                return piece_type(promotion_type(m));
+        if (move_type(m) == EN_PASSANT)
+                return PAWN;
+        return piece_type(piece_on(b, to_sq(m)));
 }
 
 static inline void upd_cont(Searchstack *ss, int d, piece_t pc, square_t to, bool good) {
         int bonus = good ? history_bonus(d) : -history_bonus(d);
-        for (int i = 1; i <= 4; i += i)
-                if ((ss - i)->pieceHistory)
-                        add_pc_history(*(ss - i)->pieceHistory, pc, to, bonus);
+        if ((ss - 1)->pieceHistory)
+                add_pc_history(*(ss - 1)->pieceHistory, pc, to, bonus);
+        if ((ss - 2)->pieceHistory)
+                add_pc_history(*(ss - 2)->pieceHistory, pc, to, bonus);
+        if ((ss - 4)->pieceHistory)
+                add_pc_history(*(ss - 4)->pieceHistory, pc, to, bonus);
 }
 
 static inline void upd_cap(capture_history_t *ch, const Board *b, move_t m, int bonus) {
-        piece_t pc = piece_on(b, from_sq(m));
-        add_cap_history(*ch, pc, to_sq(m), cap_type(b, m), bonus);
+        square_t    to  = to_sq(m);
+        piece_t     pc  = piece_on(b, from_sq(m));
+        piecetype_t cap = cap_type(b, m);
+        add_cap_history(*ch, pc, to, cap, bonus);
 }
 
 static inline int cont_score(const Board *b, const Searchstack *ss, move_t m) {
         piece_t  pc = piece_on(b, from_sq(m));
         square_t to = to_sq(m);
         int      h  = 0;
-        for (int i = 1; i <= 4; i += i)
-                if ((ss - i)->pieceHistory)
-                        h += get_pc_history_score(*(ss - i)->pieceHistory, pc, to);
+        if ((ss - 1)->pieceHistory)
+                h += get_pc_history_score(*(ss - 1)->pieceHistory, pc, to);
+        if ((ss - 2)->pieceHistory)
+                h += get_pc_history_score(*(ss - 2)->pieceHistory, pc, to);
+        if ((ss - 4)->pieceHistory)
+                h += get_pc_history_score(*(ss - 4)->pieceHistory, pc, to);
         return h;
 }
 
@@ -162,13 +76,14 @@ hist_score(const Board *b, const Worker *w, const Searchstack *ss, move_t m) {
 static inline score_t
 quiet_rank(const Movepicker *mp, piece_t pc, square_t to, move_t m) {
         score_t s = get_bf_history_score(mp->worker->bfHistory, pc, m) / 2;
-        for (int i = 0; i < 2; ++i)
-                if (mp->pieceHistory[i])
-                        s += get_pc_history_score(*mp->pieceHistory[i], pc, to);
+        if (mp->pieceHistory[0])
+                s += get_pc_history_score(*mp->pieceHistory[0], pc, to);
+        if (mp->pieceHistory[1])
+                s += get_pc_history_score(*mp->pieceHistory[1], pc, to);
         return s;
 }
 
-uint64_t perft(Board *b, unsigned d) {
+uint64_t node_count(Board *b, unsigned d) {
         if (d == 0)
                 return 1;
         Movelist ml;
@@ -179,103 +94,100 @@ uint64_t perft(Board *b, unsigned d) {
         Boardstack st;
         for (ExtendedMove *em = ml.moves; em < ml.last; ++em) {
                 do_move(b, em->move, &st);
-                n += perft(b, d - 1);
+                n += node_count(b, d - 1);
                 undo_move(b, em->move);
         }
         return n;
 }
 
-void search_print_root_info(Board *b,
-    Worker                        *w,
-    int                            mpv,
-    int                            iter,
-    clock_t                        time,
-    int                            bound) {
-        bool one = mpv == 1 && (bound == EXACT_BOUND || time > 3000);
-        bool all = mpv > 1 && bound == EXACT_BOUND &&
-            (w->pvLine == mpv - 1 || time > 3000);
-        if (w->idx || !(one || all))
-                return;
-        for (int i = 0; i < mpv; ++i) {
-                move_t hold                    = w->rootMoves[i].pv[DISPLAY_PV];
-                w->rootMoves[i].pv[DISPLAY_PV] = NO_MOVE;
-                print_pv(b, w->rootMoves + i, i + 1, iter, time, bound);
-                w->rootMoves[i].pv[DISPLAY_PV] = hold;
-        }
-        fflush(stdout);
+uint64_t perft(Board *b, unsigned d) {
+        return node_count(b, d);
 }
 
-static void update_quiet_stats(const Board *b,
-    int                                     d,
-    move_t                                  bm,
-    const move_t                           *q,
-    int                                     qc,
-    Searchstack                            *ss) {
+void update_quiet_stats(const Board *b,
+    int                              d,
+    move_t                           best,
+    const move_t                     quiets[64],
+    int                              qc,
+    Searchstack                     *ss) {
         Worker  *w     = get_worker(b);
         int      bonus = history_bonus(d);
-        piece_t  pc    = piece_on(b, from_sq(bm));
-        square_t to    = to_sq(bm);
-        add_bf_history(w->bfHistory, pc, bm, bonus);
+        piece_t  pc    = piece_on(b, from_sq(best));
+        square_t to    = to_sq(best);
+        if ((ss - 1)->pieceHistory) {
+                square_t lto                        = to_sq((ss - 1)->currentMove);
+                w->cmHistory[piece_on(b, lto)][lto] = best;
+        }
+        add_bf_history(w->bfHistory, pc, best, bonus);
         upd_cont(ss, d, pc, to, true);
-        if (ss->killers[0] != bm) {
+        if (ss->killers[0] != best) {
                 ss->killers[1] = ss->killers[0];
-                ss->killers[0] = bm;
+                ss->killers[0] = best;
         }
         for (int i = 0; i < qc; ++i) {
-                pc = piece_on(b, from_sq(q[i]));
-                add_bf_history(w->bfHistory, pc, q[i], -bonus);
-                upd_cont(ss, d, pc, to_sq(q[i]), false);
+                move_t m = quiets[i];
+                pc       = piece_on(b, from_sq(m));
+                add_bf_history(w->bfHistory, pc, m, -bonus);
+                upd_cont(ss, d, pc, to_sq(m), false);
         }
 }
 
-static void update_capture_stats(const Board *b,
-    int                                       d,
-    move_t                                    bm,
-    const move_t                             *c,
-    int                                       cc) {
+void update_capture_stats(const Board *b,
+    int                                d,
+    move_t                             best,
+    const move_t                       caps[64],
+    int                                cc,
+    Searchstack                       *ss) {
+        (void)ss;
         Worker *w     = get_worker(b);
         int     bonus = history_bonus(d);
-        if (capture_or_promotion(b, bm))
-                upd_cap(&w->capHistory, b, bm, bonus);
+        if (capture_or_promotion(b, best))
+                upd_cap(&w->capHistory, b, best, bonus);
         for (int i = 0; i < cc; ++i)
-                upd_cap(&w->capHistory, b, c[i], -bonus);
+                upd_cap(&w->capHistory, b, caps[i], -bonus);
 }
 
 static void rank_captures(Movepicker *mp, ExtendedMove *bg, ExtendedMove *ed) {
         static const score_t victim[PIECETYPE_NB] = {0, 0, 640, 640, 1280, 2560, 0, 0};
-        for (; bg < ed; ++bg) {
-                piece_t     pc  = piece_on(mp->board, from_sq(bg->move));
-                piecetype_t cap = cap_type(mp->board, bg->move);
-                square_t    to  = to_sq(bg->move);
+        while (bg < ed) {
+                move_t      m   = bg->move;
+                square_t    to  = to_sq(m);
+                piece_t     pc  = piece_on(mp->board, from_sq(m));
+                piecetype_t cap = cap_type(mp->board, m);
                 bg->score       = victim[cap];
                 bg->score += get_cap_history_score(mp->worker->capHistory, pc, to, cap);
+                ++bg;
         }
 }
 
 static void rank_quiets(Movepicker *mp, ExtendedMove *bg, ExtendedMove *ed) {
         for (; bg < ed; ++bg) {
-                piece_t pc = piece_on(mp->board, from_sq(bg->move));
-                bg->score  = quiet_rank(mp, pc, to_sq(bg->move), bg->move);
+                move_t m  = bg->move;
+                bg->score = quiet_rank(mp, piece_on(mp->board, from_sq(m)), to_sq(m), m);
         }
 }
 
 static void rank_evasions(Movepicker *mp, ExtendedMove *bg, ExtendedMove *ed) {
-        for (; bg < ed; ++bg) {
-                move_t  m  = bg->move;
-                piece_t pc = piece_on(mp->board, from_sq(m));
-                if (capture_or_promotion(mp->board, m))
-                        bg->score = 28672 + cap_type(mp->board, m) * 8 - piece_type(pc);
-                else
-                        bg->score = quiet_rank(mp, pc, to_sq(m), m);
+        while (bg < ed) {
+                move_t m = bg->move;
+                if (capture_or_promotion(mp->board, m)) {
+                        piecetype_t mv = piece_type(piece_on(mp->board, from_sq(m)));
+                        piecetype_t cp = cap_type(mp->board, m);
+                        bg->score      = 28672 + cp * 8 - mv;
+                } else {
+                        piece_t pc = piece_on(mp->board, from_sq(m));
+                        bg->score  = quiet_rank(mp, pc, to_sq(m), m);
+                }
+                ++bg;
         }
 }
 
-static void movepicker_setup(Movepicker *mp,
-    bool                                 qs,
-    const Board                         *b,
-    const Worker                        *w,
-    move_t                               tt,
-    Searchstack                         *ss) {
+void movepicker_setup(Movepicker *mp,
+    bool                          qs,
+    const Board                  *b,
+    const Worker                 *w,
+    move_t                        tt,
+    Searchstack                  *ss) {
         mp->inQsearch = qs;
         mp->board     = b;
         mp->worker    = w;
@@ -288,12 +200,17 @@ static void movepicker_setup(Movepicker *mp,
                 mp->stage = PICK_TT +
                     !(tt && (!qs || capture_or_promotion(b, tt)) &&
                         move_pseudo_legal(b, tt));
-        mp->counter = NO_MOVE;
+        if ((ss - 1)->pieceHistory) {
+                square_t lto = to_sq((ss - 1)->currentMove);
+                mp->counter  = w->cmHistory[piece_on(b, lto)][lto];
+        } else {
+                mp->counter = NO_MOVE;
+        }
         mp->pieceHistory[0] = (ss - 1)->pieceHistory;
         mp->pieceHistory[1] = (ss - 2)->pieceHistory;
 }
 
-static move_t movepicker_next(Movepicker *mp, bool skipQuiets, int see_th) {
+move_t movepicker_next(Movepicker *mp, bool skipQuiets, int see_th) {
 top:
         switch (mp->stage) {
                 case PICK_TT:
@@ -338,6 +255,10 @@ top:
                         FALL;
                 case PICK_COUNTER:
                         ++mp->stage;
+                        if (mp->counter && mp->counter != mp->ttMove &&
+                            mp->counter != mp->killer1 && mp->counter != mp->killer2 &&
+                            move_pseudo_legal(mp->board, mp->counter))
+                                return mp->counter;
                         FALL;
                 case GEN_QUIET:
                         ++mp->stage;
@@ -347,20 +268,24 @@ top:
                         }
                         FALL;
                 case PICK_QUIET:
-                        while (!skipQuiets && mp->cur < mp->list.last) {
-                                place_top_move(mp->cur, mp->list.last);
-                                move_t m = (mp->cur++)->move;
-                                if (m != mp->ttMove && m != mp->killer1 &&
-                                    m != mp->killer2)
-                                        return m;
+                        if (!skipQuiets) {
+                                while (mp->cur < mp->list.last) {
+                                        place_top_move(mp->cur, mp->list.last);
+                                        move_t m = (mp->cur++)->move;
+                                        if (m != mp->ttMove && m != mp->killer1 &&
+                                            m != mp->killer2 && m != mp->counter)
+                                                return m;
+                                }
                         }
                         ++mp->stage;
                         mp->cur = mp->list.moves;
                         FALL;
                 case PICK_BAD_INSTABLE:
-                        for (; mp->cur < mp->badCaptures; ++mp->cur)
+                        while (mp->cur < mp->badCaptures) {
                                 if (mp->cur->move != mp->ttMove)
                                         return (mp->cur++)->move;
+                                ++mp->cur;
+                        }
                         break;
                 case CHECK_GEN_ALL:
                         ++mp->stage;
@@ -369,10 +294,11 @@ top:
                         mp->cur = mp->list.moves;
                         FALL;
                 case CHECK_PICK_ALL:
-                        for (; mp->cur < mp->list.last; ++mp->cur) {
+                        while (mp->cur < mp->list.last) {
                                 place_top_move(mp->cur, mp->list.last);
                                 if (mp->cur->move != mp->ttMove)
                                         return (mp->cur++)->move;
+                                ++mp->cur;
                         }
                         break;
         }
@@ -517,10 +443,12 @@ score_t search(bool isPV,
                         undo_move(b, m);
                         if (s < pcBeta)
                                 continue;
+
                         tt_save(e, key, TTS(s), sEv, depth - 3, LOWER_BOUND, m);
                         return s;
                 }
         }
+
         if (!root && !found && depth >= 3)
                 --depth;
 
@@ -555,13 +483,18 @@ main_loop:;
                         if (depth <= 7 && !inCheck && quiet &&
                             eval + FP_BASE_MARGIN + FP_DEPTH_MARGIN * depth <= alpha)
                                 skipQ = true;
-                        if (depth <= 12 && (!quiet || moves > 4) &&
+                        if (depth <= 4 &&
+                            cont_score(b, ss, m) <
+                                CHP_BASE - CHP_DEPTH_SCALE * (depth - 1))
+                                continue;
+                        if (depth <= 12 &&
                             !see_greater_than(b,
                                 m,
                                 quiet ? SEE_QUIET_PER_DEPTH * depth
                                       : SEE_NOISY_PER_DEPTH2 * depth * depth))
                                 continue;
                 }
+
                 Boardstack st;
                 int        ext      = 0;
                 int        newDepth = depth - 1;
@@ -587,7 +520,13 @@ main_loop:;
                                     cut);
                                 ss->excludedMove = NO_MOVE;
                                 if (sScore < sBeta) {
-                                        ext = 1;
+                                        if (!isPV && sBeta - sScore > 17 &&
+                                            ss->doubleExtensions <= 9) {
+                                                ext = 2;
+                                                ss->doubleExtensions++;
+                                        } else {
+                                                ext = 1;
+                                        }
                                 } else if (sBeta >= beta) {
                                         return sBeta;
                                 }
@@ -595,6 +534,7 @@ main_loop:;
                                 ext = 1;
                         }
                 }
+
                 ss->currentMove  = m;
                 ss->pieceHistory = &w->ctHistory[pc][to_sq(m)];
                 do_move_gc(b, m, &st, chk);
@@ -603,7 +543,7 @@ main_loop:;
                 if (lmr) {
                         R = lmr_base_value(depth, moves, improving, quiet);
                         R += !isPV + cut;
-                        R -= (m == mp.killer1 || m == mp.killer2);
+                        R -= (m == mp.killer1 || m == mp.killer2 || m == mp.counter);
                         R -= quiet && !see_greater_than(b, reverse_move(m), 0);
                         R -= iclamp(hist / LMR_HIST_DIV, -3, 3);
                         R = iclamp(R, 0, newDepth - 1);
@@ -618,8 +558,6 @@ main_loop:;
                             true);
                 newDepth += ext;
                 if ((R && s > alpha) || (!lmr && !(isPV && moves == 1))) {
-                        if (R && newDepth < depth && s > Score + 52)
-                                ++newDepth;
                         s = -search(false, b, newDepth, -alpha - 1, -alpha, ss + 1, !cut);
                         if (R)
                                 upd_cont(ss, depth, pc, to_sq(m), s > alpha);
@@ -665,7 +603,8 @@ main_loop:;
                                                     depth,
                                                     best,
                                                     caps,
-                                                    cc);
+                                                    cc,
+                                                    ss);
                                         break;
                                 }
                         }
@@ -675,10 +614,9 @@ main_loop:;
                 else if (cc < 64 && !quiet)
                         caps[cc++] = m;
         }
+
         if (moves == 0)
                 Score = ss->excludedMove ? alpha : inCheck ? mated_in(ss->plies) : 0;
-        if (Score >= beta && abs(Score) < VICTORY)
-                Score = (Score * depth + beta) / (depth + 1);
         if (!root || w->pvLine == 0) {
                 int bound = Score >= beta ? LOWER_BOUND
                     : (isPV && best)      ? EXACT_BOUND
@@ -697,7 +635,6 @@ main_loop:;
 score_t qsearch(bool isPV, Board *b, score_t alpha, score_t beta, Searchstack *ss) {
         Worker       *w        = get_worker(b);
         const score_t oldAlpha = alpha;
-        hashkey_t     key      = b->stack->boardKey;
         if (!w->idx)
                 check_time();
         if (isPV && w->seldepth < ss->plies + 1)
@@ -711,7 +648,7 @@ score_t qsearch(bool isPV, Board *b, score_t alpha, score_t beta, Searchstack *s
         if (alpha >= beta)
                 return alpha;
         bool      found;
-        TT_Entry *e       = tt_probe(key, &found);
+        TT_Entry *e       = tt_probe(b->stack->boardKey, &found);
         score_t   ttScore = NO_SCORE;
         int       ttBound = NO_BOUND;
         move_t    ttMove  = NO_MOVE;
@@ -719,7 +656,7 @@ score_t qsearch(bool isPV, Board *b, score_t alpha, score_t beta, Searchstack *s
                 ttBound = e->genbound & 3;
                 ttScore = score_from_tt(e->score, ss->plies);
                 ttMove  = e->bestmove;
-                if (!isPV && (abs(ttScore) < VICTORY || ttBound == EXACT_BOUND) &&
+                if (!isPV &&
                     (((ttBound & LOWER_BOUND) && ttScore >= beta) ||
                         ((ttBound & UPPER_BOUND) && ttScore <= alpha)))
                         return ttScore;
@@ -730,15 +667,19 @@ score_t qsearch(bool isPV, Board *b, score_t alpha, score_t beta, Searchstack *s
                 eval  = NO_SCORE;
                 Score = -INF_SCORE;
         } else {
-                eval = Score = found ? e->eval : evaluate(b);
-                if (found && (ttBound & (ttScore > eval ? LOWER_BOUND : UPPER_BOUND)))
-                        Score = ttScore;
+                if (found) {
+                        eval = Score = e->eval;
+                        if (ttBound & (ttScore > eval ? LOWER_BOUND : UPPER_BOUND))
+                                Score = ttScore;
+                } else {
+                        eval = Score = evaluate(b);
+                }
                 alpha = imax(alpha, Score);
                 if (alpha >= beta) {
                         if (!found)
                                 tt_save(e,
-                                    key,
-                                    TTS(Score),
+                                    b->stack->boardKey,
+                                    score_to_tt(Score, ss->plies),
                                     eval,
                                     0,
                                     LOWER_BOUND,
@@ -746,9 +687,11 @@ score_t qsearch(bool isPV, Board *b, score_t alpha, score_t beta, Searchstack *s
                         return alpha;
                 }
         }
+
         Movepicker mp;
         movepicker_setup(&mp, true, b, w, ttMove, ss);
-        move_t  best    = NO_MOVE, m, pv[256];
+        move_t  best = NO_MOVE, m;
+        move_t  pv[256];
         int     moves   = 0;
         bool    canFP   = !inCheck && popcount(occupancy_bb(b)) >= 5;
         score_t futBase = Score + QFP_BASE;
@@ -780,23 +723,30 @@ score_t qsearch(bool isPV, Board *b, score_t alpha, score_t beta, Searchstack *s
                 undo_move(b, m);
                 if (STOP)
                         return 0;
-                if (s > Score) {
+                if (Score < s) {
                         Score = s;
-                        if (s > alpha) {
-                                alpha = s;
+                        if (alpha < Score) {
+                                alpha = Score;
                                 best  = m;
                                 if (isPV)
                                         update_pv(ss->pv, best, (ss + 1)->pv);
-                                if (s >= beta)
+                                if (alpha >= beta)
                                         break;
                         }
                 }
         }
+
         if (moves == 0 && inCheck)
                 Score = mated_in(ss->plies);
         int bound = Score >= beta ? LOWER_BOUND
             : Score <= oldAlpha   ? UPPER_BOUND
                                   : EXACT_BOUND;
-        tt_save(e, key, TTS(Score), eval, 0, bound, best);
+        tt_save(e,
+            b->stack->boardKey,
+            score_to_tt(Score, ss->plies),
+            eval,
+            0,
+            bound,
+            best);
         return Score;
 }

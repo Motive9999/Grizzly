@@ -21,7 +21,6 @@ int main(int argc, char **argv) {
         psq_score_init();
         zobrist_init();
         cyclic_init();
-        init_kpk_bitbase();
 
 #ifdef TUNE
 

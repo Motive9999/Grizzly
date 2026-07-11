@@ -1,15 +1,14 @@
 #ifndef DEFS_H
 #define DEFS_H
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-#include <pthread.h>
-#include <time.h>
-#include <sys/timeb.h>
 #include <inttypes.h>
+#include <pthread.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <sys/timeb.h>
+#include <time.h>
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L &&                          \
     !defined(__STDC_NO_ATOMICS__)
@@ -69,7 +68,6 @@ typedef int32_t  Move;
 typedef int32_t  MoveType;
 typedef int16_t  Score;
 typedef int32_t  ScorePair;
-typedef int16_t  Phase;
 typedef uint64_t Bitboard;
 typedef uint64_t HashKey;
 
@@ -112,75 +110,19 @@ enum {
 };
 enum {
         SQ_A1,
-        SQ_B1,
-        SQ_C1,
+        SQ_C1 = 2,
         SQ_D1,
-        SQ_E1,
-        SQ_F1,
+        SQ_F1 = 5,
         SQ_G1,
         SQ_H1,
-        SQ_A2,
-        SQ_B2,
-        SQ_C2,
-        SQ_D2,
-        SQ_E2,
-        SQ_F2,
-        SQ_G2,
-        SQ_H2,
-        SQ_A3,
-        SQ_B3,
-        SQ_C3,
-        SQ_D3,
-        SQ_E3,
-        SQ_F3,
-        SQ_G3,
-        SQ_H3,
-        SQ_A4,
-        SQ_B4,
-        SQ_C4,
-        SQ_D4,
-        SQ_E4,
-        SQ_F4,
-        SQ_G4,
-        SQ_H4,
-        SQ_A5,
-        SQ_B5,
-        SQ_C5,
-        SQ_D5,
-        SQ_E5,
-        SQ_F5,
-        SQ_G5,
-        SQ_H5,
-        SQ_A6,
-        SQ_B6,
-        SQ_C6,
-        SQ_D6,
-        SQ_E6,
-        SQ_F6,
-        SQ_G6,
-        SQ_H6,
-        SQ_A7,
-        SQ_B7,
-        SQ_C7,
-        SQ_D7,
-        SQ_E7,
-        SQ_F7,
-        SQ_G7,
-        SQ_H7,
-        SQ_A8,
-        SQ_B8,
-        SQ_C8,
-        SQ_D8,
-        SQ_E8,
-        SQ_F8,
-        SQ_G8,
-        SQ_H8,
-        SQ_NONE,
+        SQ_A8     = 56,
+        SQ_H8     = 63,
+        SQ_NONE   = 64,
         SQUARE_NB = 64
 };
 enum { NORTH = 8, SOUTH = -8, EAST = 1, WEST = -1 };
-enum { FILE_A, FILE_B, FILE_C, FILE_D, FILE_E, FILE_F, FILE_G, FILE_H, FILE_NB };
-enum { RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8 };
+enum { FILE_A, FILE_C = 2, FILE_E = 4, FILE_G = 6, FILE_H, FILE_NB };
+enum { RANK_1, RANK_2, RANK_8 = 7 };
 enum {
         WHITE_OO           = 1,
         WHITE_OOO          = 2,
@@ -309,16 +251,11 @@ extern int         SquareDistance[SQUARE_NB][SQUARE_NB];
 extern const Score PieceScores[PHASE_NB][PIECE_NB];
 extern ScorePair   PsqScore[PIECE_NB][SQUARE_NB];
 
-static const Bitboard FILE_A_BB = 0x0101010101010101ul, FILE_B_BB = 0x0202020202020202ul,
-                      FILE_C_BB = 0x0404040404040404ul, FILE_D_BB = 0x0808080808080808ul,
-                      FILE_E_BB = 0x1010101010101010ul, FILE_F_BB = 0x2020202020202020ul,
-                      FILE_G_BB = 0x4040404040404040ul, FILE_H_BB = 0x8080808080808080ul;
+static const Bitboard FILE_A_BB = 0x0101010101010101ul, FILE_H_BB = 0x8080808080808080ul;
 static const Bitboard RANK_1_BB = 0x00000000000000FFul, RANK_2_BB = 0x000000000000FF00ul,
-                      RANK_3_BB = 0x0000000000FF0000ul, RANK_4_BB = 0x00000000FF000000ul,
-                      RANK_5_BB = 0x000000FF00000000ul, RANK_6_BB = 0x0000FF0000000000ul,
+                      RANK_3_BB = 0x0000000000FF0000ul, RANK_6_BB = 0x0000FF0000000000ul,
                       RANK_7_BB = 0x00FF000000000000ul, RANK_8_BB = 0xFF00000000000000ul;
-static const Bitboard ALL_BB = 0xFFFFFFFFFFFFFFFFul, DSQ_BB = 0xAA55AA55AA55AA55ul,
-                      CENTER_BB = 0x0000001818000000ul;
+static const Bitboard ALL_BB = 0xFFFFFFFFFFFFFFFFul, DSQ_BB = 0xAA55AA55AA55AA55ul;
 
 extern Bitboard LineBB[SQUARE_NB][SQUARE_NB];
 extern Bitboard PseudoMoves[PIECETYPE_NB][SQUARE_NB];
@@ -401,24 +338,6 @@ INLINED Bitboard rook_moves_bb(Square sq, Bitboard occ) {
         const Magic *m = &RookMagics[sq];
         return m->moves[magic_index(m, occ)];
 }
-INLINED Bitboard wpawns_attacks_bb(Bitboard b) {
-        return shift_up_left(b) | shift_up_right(b);
-}
-INLINED Bitboard bpawns_attacks_bb(Bitboard b) {
-        return shift_down_left(b) | shift_down_right(b);
-}
-INLINED Bitboard adjacent_files_bb(Square s) {
-        Bitboard f = sq_file_bb(s);
-        return shift_left(f) | shift_right(f);
-}
-INLINED Bitboard forward_ranks_bb(Color c, Square s) {
-        return c == WHITE ? ~RANK_1_BB << 8 * sq_rank(s)
-                          : ~RANK_8_BB >> 8 * (RANK_8 - sq_rank(s));
-}
-INLINED Bitboard passed_pawn_span_bb(Color c, Square s) {
-        return forward_ranks_bb(c, s) & (adjacent_files_bb(s) | sq_file_bb(s));
-}
-
 INLINED int popcount(Bitboard b) {
 #ifndef USE_POPCNT
         const Bitboard m1 = 0x5555555555555555ull, m2 = 0x3333333333333333ull,
@@ -733,96 +652,6 @@ INLINED bool movelist_has_move(const Movelist *ml, Move m) {
         return false;
 }
 
-typedef struct {
-        HashKey  key;
-        Bitboard attackSpan[COLOR_NB], attacks[COLOR_NB], attacks2[COLOR_NB],
-            passed[COLOR_NB];
-        ScorePair value;
-} PawnEntry;
-
-enum { PawnTableSize = 1 << 15 };
-
-void init_kpk_bitbase(void);
-
-#ifdef TUNE
-typedef enum {
-        IDX_PIECE,
-        IDX_PSQT     = IDX_PIECE + 5,
-        IDX_CASTLING = IDX_PSQT + 48 + 32 * 5,
-        IDX_INITIATIVE,
-        IDX_KNIGHT_CLOSED_POS,
-        IDX_KNIGHT_SHIELDED = IDX_KNIGHT_CLOSED_POS + 5,
-        IDX_KNIGHT_OUTPOST,
-        IDX_KNIGHT_CENTER_OUTPOST,
-        IDX_KNIGHT_SOLID_OUTPOST,
-        IDX_BISHOP_PAWNS_COLOR,
-        IDX_BISHOP_PAIR = IDX_BISHOP_PAWNS_COLOR + 7,
-        IDX_BISHOP_SHIELDED,
-        IDX_BISHOP_LONG_DIAG,
-        IDX_ROOK_SEMIOPEN,
-        IDX_ROOK_OPEN,
-        IDX_ROOK_BLOCKED,
-        IDX_ROOK_XRAY_QUEEN,
-        IDX_MOBILITY_KNIGHT,
-        IDX_MOBILITY_BISHOP = IDX_MOBILITY_KNIGHT + 9,
-        IDX_MOBILITY_ROOK   = IDX_MOBILITY_BISHOP + 14,
-        IDX_MOBILITY_QUEEN  = IDX_MOBILITY_ROOK + 15,
-        IDX_BACKWARD        = IDX_MOBILITY_QUEEN + 28,
-        IDX_STRAGGLER,
-        IDX_DOUBLED,
-        IDX_ISOLATED,
-        IDX_PASSER,
-        IDX_PHALANX            = IDX_PASSER + 6,
-        IDX_DEFENDER           = IDX_PHALANX + 6,
-        IDX_PP_OUR_KING_PROX   = IDX_DEFENDER + 5,
-        IDX_PP_THEIR_KING_PROX = IDX_PP_OUR_KING_PROX + 7,
-        IDX_PAWN_ATK_MINOR     = IDX_PP_THEIR_KING_PROX + 7,
-        IDX_PAWN_ATK_ROOK,
-        IDX_PAWN_ATK_QUEEN,
-        IDX_MINOR_ATK_ROOK,
-        IDX_MINOR_ATK_QUEEN,
-        IDX_ROOK_ATK_QUEEN,
-        IDX_KS_KNIGHT,
-        IDX_KS_BISHOP,
-        IDX_KS_ROOK,
-        IDX_KS_QUEEN,
-        IDX_KS_ATTACK,
-        IDX_KS_WEAK_Z,
-        IDX_KS_CHECK_N,
-        IDX_KS_CHECK_B,
-        IDX_KS_CHECK_R,
-        IDX_KS_CHECK_Q,
-        IDX_KS_QUEENLESS,
-        IDX_KS_STORM,
-        IDX_KS_SHELTER = IDX_KS_STORM + 24,
-        IDX_KS_OFFSET  = IDX_KS_SHELTER + 24,
-        IDX_COUNT
-} tune_idx_t;
-
-typedef struct {
-        int       phase;
-        ScorePair eval, safety[COLOR_NB];
-        int       scaleFactor;
-        int8_t    coeffs[IDX_COUNT][COLOR_NB];
-} evaltrace_t;
-
-extern evaltrace_t Trace;
-
-#define TRACE_INIT               memset(&Trace, 0, sizeof(Trace))
-#define TRACE_ADD(idx, color, n) Trace.coeffs[idx][color] += n
-#define TRACE_PHASE(p)           Trace.phase = p
-#define TRACE_SAFETY(c, v)       Trace.safety[c] = v
-#define TRACE_EVAL(e)            Trace.eval = e
-#define TRACE_FACTOR(f)          Trace.scaleFactor = f
-#else
-#define TRACE_INIT
-#define TRACE_ADD(x, c, n)
-#define TRACE_PHASE(p)
-#define TRACE_SAFETY(c, v)
-#define TRACE_EVAL(e)
-#define TRACE_FACTOR(f)
-#endif
-
 Score evaluate(const Board *b);
 
 typedef struct {
@@ -881,9 +710,6 @@ void      tt_save(TT_Entry *e, HashKey k, Score s, Score ev, int d, int b, Move 
 int       tt_hashfull(void);
 void      tt_resize(size_t mbsize);
 
-void show_options(void);
-void set_option(const char *name, const char *value);
-
 typedef struct {
         long threads, hash, moveOverhead, multiPv;
         bool chess960, ponder, debug, showWDL, normalizeScore;
@@ -898,7 +724,6 @@ typedef struct {
 
 char       *get_next_token(char **str);
 const char *move_to_str(Move m, bool chess960);
-const char *score_to_str(Score s);
 Move        str_to_move(const Board *b, const char *str);
 void        uci_loop(int argc, char **argv);
 void        uci_d(const char *args);
@@ -930,14 +755,7 @@ typedef struct {
         Move  pv[512];
 } RootMove;
 
-void      sort_root_moves(RootMove *begin, RootMove *end);
 RootMove *find_root_move(RootMove *begin, RootMove *end, Move m);
-void      print_pv(const Board *b,
-    RootMove              *rm,
-    int                    multiPv,
-    int                    depth,
-    clock_t                time,
-    int                    bound);
 
 typedef struct {
         Board                  board;
@@ -946,7 +764,6 @@ typedef struct {
         continuation_history_t ctHistory;
         countermove_history_t  cmHistory;
         capture_history_t      capHistory;
-        PawnEntry             *pawnTable;
         int                    seldepth, rootDepth, verifPlies;
         _Atomic uint64_t       nodes;
         RootMove              *rootMoves;
@@ -973,7 +790,12 @@ void  worker_reset(Worker *w);
 void  worker_start_search(Worker *w);
 void  worker_wait_search_end(Worker *w);
 void *worker_entry(void *w);
-void  search_print_root_info(Board *b, Worker *w, int mpv, int iter, clock_t time, int bound);
+void  search_print_root_info(Board *b,
+    Worker                        *w,
+    int                            mpv,
+    int                            iter,
+    clock_t                        time,
+    int                            bound);
 
 typedef struct {
         size_t      size;

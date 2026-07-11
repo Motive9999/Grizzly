@@ -3,32 +3,22 @@
 #include <stdint.h>
 #include <string.h>
 
-#ifdef TUNE
-evaltrace_t Trace;
-#endif
-
-/* Kept for linkage: defs.h inline hooks update psqScorePair through PsqScore,
-   and SEE/futility read PieceScores. PsqScore stays zeroed (NN handles eval). */
 ScorePair PsqScore[PIECE_NB][SQUARE_NB];
-uint8_t   KPK_Bitbase[1];
 
-#define V_P_MG  100
-#define V_P_EG  120
-#define V_N_MG  320
-#define V_N_EG  320
-#define V_B_MG  330
-#define V_B_EG  340
-#define V_R_MG  500
-#define V_R_EG  540
-#define V_Q_MG  950
+#define V_P_MG 100
+#define V_P_EG 120
+#define V_N_MG 320
+#define V_N_EG 320
+#define V_B_MG 330
+#define V_B_EG 340
+#define V_R_MG 500
+#define V_R_EG 540
+#define V_Q_MG 950
 #define V_Q_EG 1000
 
 const Score PieceScores[PHASE_NB][PIECE_NB] = {
-        {0, V_P_MG, V_N_MG, V_B_MG, V_R_MG, V_Q_MG, 0, 0,
-         0, V_P_MG, V_N_MG, V_B_MG, V_R_MG, V_Q_MG, 0, 0},
-        {0, V_P_EG, V_N_EG, V_B_EG, V_R_EG, V_Q_EG, 0, 0,
-         0, V_P_EG, V_N_EG, V_B_EG, V_R_EG, V_Q_EG, 0, 0}
-};
+        {0, V_P_MG, V_N_MG, V_B_MG, V_R_MG, V_Q_MG, 0, 0, 0, V_P_MG, V_N_MG, V_B_MG, V_R_MG, V_Q_MG, 0, 0},
+        {0, V_P_EG, V_N_EG, V_B_EG, V_R_EG, V_Q_EG, 0, 0, 0, V_P_EG, V_N_EG, V_B_EG, V_R_EG, V_Q_EG, 0, 0}};
 
 #ifndef NN_SCALE
 #define NN_SCALE 400.0f
@@ -82,9 +72,6 @@ static void nn_prepare_f32_weights(void) {
 void psq_score_init(void) {
         memset(PsqScore, 0, sizeof(PsqScore));
         nn_prepare_f32_weights();
-}
-
-void init_kpk_bitbase(void) {
 }
 
 static inline Square pop_lsb_eval(Bitboard *bb) {
@@ -147,19 +134,8 @@ static inline Score abs_score(Score s) {
 static Score scale_nn_by_material(const Board *b, Score s) {
         Score mat = total_material_eval(b);
 
-        /*
-           Patricia-style material scaling:
-           - Rich positions keep/trust NN output more.
-           - Simplified positions soften raw NN output.
-           This keeps huge middlegame attacking evals meaningful while
-           preventing simplified NN scores from becoming fake certainty.
-        */
         float multiplier = (750.0f + (float)mat / 25.0f) / 1024.0f;
 
-        /*
-           Queenless or low-material positions are less tactical/volatile.
-           Soften the NN slightly there.
-        */
         if (!piece_bb(b, WHITE, QUEEN) || !piece_bb(b, BLACK, QUEEN) || mat < 4000)
                 multiplier -= 0.10f;
 
@@ -172,11 +148,6 @@ static Score material_anchor_eval(const Board *b) {
         Score matTotal = total_material_eval(b);
         Score matScore = phased_material_eval(b);
 
-        /*
-           Normal: keep material as a light stabilizer behind NN.
-           Endgame/low-material with a real advantage: make material louder.
-           This helps conversion and stops the engine from shuffling at +large.
-        */
         if (matTotal < 4000 && abs_score(matScore) >= 300)
                 return matScore / 2;
 
@@ -257,8 +228,8 @@ static inline void nn_add_row(float *restrict h, int feature) {
 }
 
 static void nn_accumulate_both(const Board *b,
-    float white[restrict NN_HIDDEN_1],
-    float black[restrict NN_HIDDEN_1]) {
+    float                                   white[restrict NN_HIDDEN_1],
+    float                                   black[restrict NN_HIDDEN_1]) {
         Square wk = get_king_square(b, WHITE);
         Square bk = get_king_square(b, BLACK);
 
@@ -318,8 +289,9 @@ static Score nn_eval_cp(const Board *b) {
                                           : nn_output(black, white)) *
             NN_SCALE;
 
-        s = s > NN_OUTPUT_CLIP ? NN_OUTPUT_CLIP : s < -NN_OUTPUT_CLIP ? -NN_OUTPUT_CLIP
-                                                                      : s;
+        s = s > NN_OUTPUT_CLIP    ? NN_OUTPUT_CLIP
+            : s < -NN_OUTPUT_CLIP ? -NN_OUTPUT_CLIP
+                                  : s;
 
         return (Score)s;
 }

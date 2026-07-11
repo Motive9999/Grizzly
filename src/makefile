@@ -15,7 +15,7 @@ CC = gcc
 #   worker.c    - Worker pool + time management + iterative deepening
 #   uci.c       - UCI protocol + option handling
 
-SOURCES 	= board.c nn.c main.c move.c search.c worker.c uci.c
+SOURCES 	= board.c main.c move.c nn.c tt.c search.c worker.c uci.c
 
 # Object files
 OBJECTS = $(SOURCES:.c=.o)
