@@ -13,8 +13,6 @@ WorkerPool SearchWorkerPool;
 static int Reductions[2][256];
 int        Pruning[2][16];
 
-const double BestmoveTypeScale[BM_TYPE_NB] = {
-    0.20, 0.45, 0.50, 0.85, 0.95, 1.00, 1.20, 1.40};
 const double BestmoveStabilityScale[5] = {2.50, 1.20, 0.90, 0.80, 0.75};
 
 static void die(const char *m) {
@@ -90,7 +88,6 @@ void timeman_init(const Board *b, Timeman *tm, SearchParams *p, clock_t start) {
         tm->prevScore    = NO_SCORE;
         tm->prevBestmove = NO_MOVE;
         tm->stability    = 0;
-        tm->type         = NO_BM_TYPE;
 }
 
 void timeman_update(Timeman *tm,
@@ -100,28 +97,16 @@ void timeman_update(Timeman *tm,
     int                      seldepth,
     int                      rootDepth,
     int                      aspFails) {
+        (void)b;
         if (tm->mode != Tournament)
                 return;
         if (tm->prevBestmove != best) {
-                Movelist list;
-                bool     quiet   = !capture_or_promotion(b, best);
-                bool     check   = move_gives_check(b, best);
                 tm->prevBestmove = best;
                 tm->stability    = 0;
-                list_all(&list, b);
-                tm->type = movelist_size(&list) == 1                       ? OneLegalMove
-                    : move_type(best) == PROMOTION                         ? Promotion
-                    : !quiet && see_greater_than(b, best, KNIGHT_MG_SCORE) ? SoundCapture
-                    : check && see_greater_than(b, best, 0)                ? SoundCheck
-                    : !quiet                                               ? Capture
-                    : see_greater_than(b, best, 0)                         ? Quiet
-                    : check                                                ? WeirdCheck
-                                                                           : WeirdQuiet;
         } else {
                 tm->stability = imin(tm->stability + 1, 4);
         }
-        double scale = BestmoveTypeScale[tm->type] *
-            BestmoveStabilityScale[tm->stability];
+        double scale = BestmoveStabilityScale[tm->stability];
         if (tm->prevScore != NO_SCORE)
                 scale *= score_difference_scale(tm->prevScore - score);
         scale *= fmin(1.35, 1.0 + fmax(0.0, (double)seldepth / rootDepth - 1.5) * 0.35);
@@ -186,7 +171,6 @@ void worker_destroy(Worker *w) {
 void worker_reset(Worker *w) {
         memset(w->bfHistory, 0, sizeof(butterfly_history_t));
         memset(w->ctHistory, 0, sizeof(continuation_history_t));
-        memset(w->cmHistory, 0, sizeof(countermove_history_t));
         memset(w->capHistory, 0, sizeof(capture_history_t));
         w->verifPlies = 0;
 }
@@ -342,19 +326,6 @@ void main_worker_search(Worker *w) {
         wpool_wait_search_end(&SearchWorkerPool);
         printf("bestmove %s", move_to_str(w->rootMoves->move, b->chess960));
         move_t ponder = w->rootMoves->pv[1];
-        if (ponder == NO_MOVE) {
-                Boardstack stack;
-                TT_Entry  *e;
-                bool       found;
-                do_move(b, w->rootMoves->move, &stack);
-                e = tt_probe(b->stack->boardKey, &found);
-                undo_move(b, w->rootMoves->move);
-                if (found) {
-                        ponder = e->bestmove;
-                        if (!move_pseudo_legal(b, ponder) || !move_is_legal(b, ponder))
-                                ponder = NO_MOVE;
-                }
-        }
         if (ponder != NO_MOVE)
                 printf(" ponder %s", move_to_str(ponder, b->chess960));
         putchar('\n');
