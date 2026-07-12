@@ -8,13 +8,13 @@ A compact UCI-compliant chess engine in C with NNUE evaluation.
 
 </div>
 
-NN evaluation and training/datagen tooling are private.<br>
+NN-evaluation and training/datagen tooling are private.<br>
 Developed with heavy LLM assistance.<br>
 This software is licensed under GPL-3.0 or later.
 
 ## Usage
 
-Grizzly implements the UCI protocol and is compatible with standard chess GUIs (such as Arena, CuteChess, or Nibbler) as well as direct command-line use.
+Grizzly implements the UCI protocol and is compatible with standard chess GUIs (such as Arena, CuteChess, or Nibbler) as well as direct command line use.
 
 ## Features
 
