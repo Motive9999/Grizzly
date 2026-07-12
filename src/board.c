@@ -24,8 +24,8 @@ Bitboard sliding_attack(const Direction *dirs, Square sq, Bitboard occ) {
         Bitboard attack = 0;
         for (int i = 0; i < 4; ++i)
                 for (Square s = sq + dirs[i];
-                    is_valid_sq(s) && SquareDistance[s][s - dirs[i]] == 1;
-                    s += dirs[i]) {
+                is_valid_sq(s) && SquareDistance[s][s - dirs[i]] == 1;
+                s += dirs[i]) {
                         attack |= square_bb(s);
                         if (occ & square_bb(s))
                                 break;
@@ -44,7 +44,7 @@ void magic_init(Bitboard *table, Magic *magics, const Direction *dirs) {
 
         for (Square sq = SQ_A1; sq <= SQ_H8; ++sq) {
                 Bitboard edges = ((RANK_1_BB | RANK_8_BB) & ~sq_rank_bb(sq)) |
-                    ((FILE_A_BB | FILE_H_BB) & ~sq_file_bb(sq));
+                ((FILE_A_BB | FILE_H_BB) & ~sq_file_bb(sq));
                 Magic *m = magics + sq;
                 m->mask  = sliding_attack(dirs, sq, 0) & ~edges;
                 m->shift = 64 - popcount(m->mask);
@@ -66,7 +66,7 @@ void magic_init(Bitboard *table, Magic *magics, const Direction *dirs) {
                 for (int i = 0; i < size;) {
                         for (m->magic = 0; popcount((m->magic * m->mask) >> 56) < 6;)
                                 m->magic = qrandom(&seed) & qrandom(&seed) &
-                                    qrandom(&seed);
+                                qrandom(&seed);
                         for (++currentEpoch, i = 0; i < size; ++i) {
                                 unsigned int idx = magic_index(m, occupancy[i]);
                                 if (epoch[idx] < currentEpoch) {
@@ -89,7 +89,7 @@ void bitboard_init(void) {
         for (Square a = SQ_A1; a <= SQ_H8; ++a)
                 for (Square b = SQ_A1; b <= SQ_H8; ++b)
                         SquareDistance[a][b] = imax(abs(sq_file(a) - sq_file(b)),
-                            abs(sq_rank(a) - sq_rank(b)));
+                        abs(sq_rank(a) - sq_rank(b)));
 
         for (Square sq = SQ_A1; sq <= SQ_H8; ++sq) {
                 const Bitboard b     = square_bb(sq);
@@ -116,12 +116,12 @@ void bitboard_init(void) {
                         const Bitboard ends = square_bb(a) | square_bb(b);
                         if (PseudoMoves[BISHOP][a] & square_bb(b))
                                 LineBB[a][b] = (bishop_moves_bb(a, 0) &
-                                                   bishop_moves_bb(b, 0)) |
-                                    ends;
+                                               bishop_moves_bb(b, 0)) |
+                                ends;
                         if (PseudoMoves[ROOK][a] & square_bb(b))
                                 LineBB[a][b] = (rook_moves_bb(a, 0) &
-                                                   rook_moves_bb(b, 0)) |
-                                    ends;
+                                               rook_moves_bb(b, 0)) |
+                                ends;
                 }
         }
 }
@@ -175,8 +175,8 @@ void cyclic_init(void) {
                                 for (Square to = from + 1; to <= SQ_H8; ++to)
                                         if (piece_moves(pt, from, 0) & square_bb(to))
                                                 cyclic_init_move(create_piece(c, pt),
-                                                    from,
-                                                    to);
+                                                from,
+                                                to);
 }
 
 #define FEN_ERR(msg)                                                                     \
@@ -240,11 +240,11 @@ static int board_parse_stm(Board *b, const char *fen) {
 static int board_set_castling(Board *b, Color c, Square rookSq) {
         const Square kingSq   = get_king_square(b, c);
         const int    castling = (c == WHITE ? WHITE_CASTLING : BLACK_CASTLING) &
-            (kingSq < rookSq ? KINGSIDE_CASTLING : QUEENSIDE_CASTLING);
+        (kingSq < rookSq ? KINGSIDE_CASTLING : QUEENSIDE_CASTLING);
         if (relative_sq_rank(kingSq, c) != RANK_1)
                 FEN_ERR("castling with king not on back-rank");
         if (sq_file(kingSq) != FILE_E ||
-            (sq_file(rookSq) != FILE_A && sq_file(rookSq) != FILE_H))
+        (sq_file(rookSq) != FILE_A && sq_file(rookSq) != FILE_H))
                 b->chess960 = true;
         b->stack->castlings |= castling;
         b->castlingMask[kingSq] |= castling;
@@ -252,14 +252,14 @@ static int board_set_castling(Board *b, Color c, Square rookSq) {
         b->castlingRookSquare[castling] = rookSq;
         const Square kingAfter = relative_sq((castling & KINGSIDE_CASTLING) ? SQ_G1
                                                                             : SQ_C1,
-            c);
+        c);
         const Square rookAfter = relative_sq((castling & KINGSIDE_CASTLING) ? SQ_F1
                                                                             : SQ_D1,
-            c);
+        c);
         b->castlingPath[castling] = (between_bb(rookSq, rookAfter) |
-                                        between_bb(kingSq, kingAfter) |
-                                        square_bb(rookAfter) | square_bb(kingAfter)) &
-            ~(square_bb(kingSq) | square_bb(rookSq));
+                                    between_bb(kingSq, kingAfter) | square_bb(rookAfter) |
+                                    square_bb(kingAfter)) &
+        ~(square_bb(kingSq) | square_bb(rookSq));
         return 0;
 }
 
@@ -277,12 +277,12 @@ static int board_parse_castling(Board *b, const char *fen) {
                 const char  cc   = toupper((unsigned char)fen[i]);
                 if (cc == 'K') {
                         for (rookSq = relative_sq(SQ_H1, side); sq_file(rookSq) != FILE_A;
-                            --rookSq)
+                        --rookSq)
                                 if (piece_on(b, rookSq) == rook)
                                         break;
                 } else if (cc == 'Q') {
                         for (rookSq = relative_sq(SQ_A1, side); sq_file(rookSq) != FILE_H;
-                            ++rookSq)
+                        ++rookSq)
                                 if (piece_on(b, rookSq) == rook)
                                         break;
                 } else if (cc >= 'A' && cc <= 'H') {
@@ -333,13 +333,14 @@ int board_from_fen(Board *b, const char *fen, bool is960, Boardstack *bs) {
                 return r;
         FEN_NEXT(fen, r);
         if (attackers_to(b, get_king_square(b, not_color(b->sideToMove))) &
-            color_bb(b, b->sideToMove))
+        color_bb(b, b->sideToMove))
                 FEN_ERR("opposite King in check");
         if ((r = board_parse_castling(b, fen)) < 0)
                 return r;
         FEN_NEXT(fen, r);
         if (!is960 && b->chess960)
-                debug_printf("info string Warning: FRC position without UCI_Chess960 "
+                debug_printf("info string Warning: FRC position without "
+                             "UCI_Chess960 "
                              "flag\n");
         b->chess960 = is960;
         if ((r = board_parse_en_passant(b, fen)) < 0)
@@ -370,7 +371,7 @@ void set_boardstack(Board *b, Boardstack *s) {
         s->boardKey = s->pawnKey = b->stack->materialKey = 0;
         s->material[WHITE] = s->material[BLACK] = 0;
         s->checkers = attackers_to(b, get_king_square(b, b->sideToMove)) &
-            color_bb(b, not_color(b->sideToMove));
+        color_bb(b, not_color(b->sideToMove));
         set_check(b, s);
         for (Bitboard bb = occupancy_bb(b); bb;) {
                 const Square sq = bb_pop_first_sq(&bb);
@@ -396,13 +397,13 @@ void set_boardstack(Board *b, Boardstack *s) {
 
 void set_check(Board *restrict b, Boardstack *restrict s) {
         s->kingBlockers[WHITE]  = slider_blockers(b,
-            color_bb(b, BLACK),
-            get_king_square(b, WHITE),
-            &s->pinners[BLACK]);
+        color_bb(b, BLACK),
+        get_king_square(b, WHITE),
+        &s->pinners[BLACK]);
         s->kingBlockers[BLACK]  = slider_blockers(b,
-            color_bb(b, WHITE),
-            get_king_square(b, BLACK),
-            &s->pinners[WHITE]);
+        color_bb(b, WHITE),
+        get_king_square(b, BLACK),
+        &s->pinners[WHITE]);
         const Square kingSq     = get_king_square(b, not_color(b->sideToMove));
         s->checkSquares[PAWN]   = pawn_moves(kingSq, not_color(b->sideToMove));
         s->checkSquares[KNIGHT] = knight_moves(kingSq);
@@ -436,7 +437,7 @@ const char *board_fen(const Board *b) {
                 for (File f = FILE_A; f <= FILE_H; ++f) {
                         int empty;
                         for (empty = 0; f <= FILE_H && empty_square(b, create_sq(f, r));
-                            ++f)
+                        ++f)
                                 ++empty;
                         if (empty)
                                 *(ptr++) = empty + '0';
@@ -453,16 +454,16 @@ const char *board_fen(const Board *b) {
                 int  mask;
                 char std, base960;
         } CR[4] = {
-            {WHITE_OO, 'K', 'A'},
-            {WHITE_OOO, 'Q', 'A'},
-            {BLACK_OO, 'k', 'a'},
-            {BLACK_OOO, 'q', 'a'},
+        {WHITE_OO, 'K', 'A'},
+        {WHITE_OOO, 'Q', 'A'},
+        {BLACK_OO, 'k', 'a'},
+        {BLACK_OOO, 'q', 'a'},
         };
         for (int i = 0; i < 4; ++i)
                 if (b->stack->castlings & CR[i].mask)
                         *(ptr++) = b->chess960
-                            ? CR[i].base960 + sq_file(b->castlingRookSquare[CR[i].mask])
-                            : CR[i].std;
+                        ? CR[i].base960 + sq_file(b->castlingRookSquare[CR[i].mask])
+                        : CR[i].std;
         if (!(b->stack->castlings & ANY_CASTLING))
                 *(ptr++) = '-';
         *(ptr++) = ' ';
@@ -473,9 +474,9 @@ const char *board_fen(const Board *b) {
                 *(ptr++) = '1' + sq_rank(b->stack->enPassantSquare);
         }
         sprintf(ptr,
-            " %d %d",
-            b->stack->rule50,
-            1 + (b->ply - (b->sideToMove == BLACK)) / 2);
+        " %d %d",
+        b->stack->rule50,
+        1 + (b->ply - (b->sideToMove == BLACK)) / 2);
         return fen;
 }
 
@@ -534,7 +535,7 @@ void do_move_gc(Board *restrict b, Move m, Boardstack *restrict next, bool gc) {
                 move_piece(b, from, to);
         if (piece_type(pc) == PAWN) {
                 if ((to ^ from) == 16 &&
-                    (pawn_moves(to - pawn_direction(us), us) & piece_bb(b, them, PAWN))) {
+                (pawn_moves(to - pawn_direction(us), us) & piece_bb(b, them, PAWN))) {
                         b->stack->enPassantSquare = to - pawn_direction(us);
                         key ^= ZobristEnPassant[sq_file(b->stack->enPassantSquare)];
                 } else if (move_type(m) == PROMOTION) {
@@ -545,7 +546,7 @@ void do_move_gc(Board *restrict b, Move m, Boardstack *restrict next, bool gc) {
                         b->stack->pawnKey ^= ZobristPsq[pc][to];
                         b->stack->material[us] += PieceScores[MIDGAME][promotion_type(m)];
                         b->stack
-                            ->materialKey ^= ZobristPsq[newPc][b->pieceCount[newPc] - 1];
+                        ->materialKey ^= ZobristPsq[newPc][b->pieceCount[newPc] - 1];
                         b->stack->materialKey ^= ZobristPsq[pc][b->pieceCount[pc]];
                 }
                 b->stack->pawnKey ^= ZobristPsq[pc][from] ^ ZobristPsq[pc][to];
@@ -555,8 +556,8 @@ void do_move_gc(Board *restrict b, Move m, Boardstack *restrict next, bool gc) {
         b->stack->boardKey      = key;
         prefetch(tt_entry_at(key));
         b->stack->checkers = gc
-            ? attackers_to(b, get_king_square(b, them)) & color_bb(b, us)
-            : 0;
+        ? attackers_to(b, get_king_square(b, them)) & color_bb(b, us)
+        : 0;
         b->sideToMove      = not_color(b->sideToMove);
         set_check(b, b->stack);
         b->stack->repetition = 0;
@@ -605,11 +606,11 @@ INLINED void castling_squares(Color us, Square kf, Square *kt, Square *rf, Squar
 }
 
 void do_castling(Board *restrict b,
-    Color  us,
-    Square kf,
-    Square *restrict kt,
-    Square *restrict rf,
-    Square *restrict rt) {
+Color  us,
+Square kf,
+Square *restrict kt,
+Square *restrict rf,
+Square *restrict rt) {
         castling_squares(us, kf, kt, rf, rt);
         remove_piece(b, kf);
         remove_piece(b, *rf);
@@ -619,11 +620,11 @@ void do_castling(Board *restrict b,
 }
 
 void undo_castling(Board *restrict b,
-    Color  us,
-    Square kf,
-    Square *restrict kt,
-    Square *restrict rf,
-    Square *restrict rt) {
+Color  us,
+Square kf,
+Square *restrict kt,
+Square *restrict rf,
+Square *restrict rt) {
         castling_squares(us, kf, kt, rf, rt);
         remove_piece(b, *kt);
         remove_piece(b, *rt);
@@ -656,22 +657,21 @@ void undo_null_move(Board *b) {
 
 Bitboard attackers_list(const Board *b, Square s, Bitboard occ) {
         return ((pawn_moves(s, BLACK) & piece_bb(b, WHITE, PAWN)) |
-            (pawn_moves(s, WHITE) & piece_bb(b, BLACK, PAWN)) |
-            (knight_moves(s) & piecetype_bb(b, KNIGHT)) |
-            (rook_moves_bb(s, occ) & piecetypes_bb(b, ROOK, QUEEN)) |
-            (bishop_moves_bb(s, occ) & piecetypes_bb(b, BISHOP, QUEEN)) |
-            (king_moves(s) & piecetype_bb(b, KING)));
+        (pawn_moves(s, WHITE) & piece_bb(b, BLACK, PAWN)) |
+        (knight_moves(s) & piecetype_bb(b, KNIGHT)) |
+        (rook_moves_bb(s, occ) & piecetypes_bb(b, ROOK, QUEEN)) |
+        (bishop_moves_bb(s, occ) & piecetypes_bb(b, BISHOP, QUEEN)) |
+        (king_moves(s) & piecetype_bb(b, KING)));
 }
 
 Bitboard slider_blockers(const Board *restrict b,
-    Bitboard sliders,
-    Square   sq,
-    Bitboard *restrict pinners) {
+Bitboard sliders,
+Square   sq,
+Bitboard *restrict pinners) {
         Bitboard blockers = *pinners = 0;
         Bitboard snipers = ((PseudoMoves[ROOK][sq] & piecetypes_bb(b, QUEEN, ROOK)) |
-                               (PseudoMoves[BISHOP][sq] &
-                                   piecetypes_bb(b, QUEEN, BISHOP))) &
-            sliders;
+                           (PseudoMoves[BISHOP][sq] & piecetypes_bb(b, QUEEN, BISHOP))) &
+        sliders;
         const Bitboard occ = occupancy_bb(b) ^ snipers;
         while (snipers) {
                 const Square   sniper = bb_pop_first_sq(&snipers);
@@ -721,7 +721,7 @@ bool game_has_cycle(const Board *b, int ply) {
                 if (!si->repetition)
                         continue;
                 if (piece_color(piece_on(b, empty_square(b, from) ? to : from)) !=
-                    b->sideToMove)
+                b->sideToMove)
                         return true;
         }
         return false;
@@ -734,35 +734,35 @@ bool move_gives_check(const Board *b, Move m) {
                 return true;
         const Square theirKing = get_king_square(b, them);
         if ((b->stack->kingBlockers[them] & square_bb(from)) &&
-            !sq_aligned(from, to, theirKing))
+        !sq_aligned(from, to, theirKing))
                 return true;
         switch (move_type(m)) {
                 case NORMAL_MOVE:
                         return false;
                 case PROMOTION:
                         return (piece_moves(promotion_type(m),
-                                    to,
-                                    occupancy_bb(b) ^ square_bb(from)) &
-                            square_bb(theirKing));
+                                to,
+                                occupancy_bb(b) ^ square_bb(from)) &
+                        square_bb(theirKing));
                 case EN_PASSANT: {
                         Square   capSq = create_sq(sq_file(to), sq_rank(from));
                         Bitboard occ   = (occupancy_bb(b) ^ square_bb(from) ^
-                                             square_bb(capSq)) |
-                            square_bb(to);
+                                         square_bb(capSq)) |
+                        square_bb(to);
                         return (rook_moves_bb(theirKing, occ) &
-                                   pieces_bb(b, us, QUEEN, ROOK)) |
-                            (bishop_moves_bb(theirKing, occ) &
-                                pieces_bb(b, us, QUEEN, BISHOP));
+                               pieces_bb(b, us, QUEEN, ROOK)) |
+                        (bishop_moves_bb(theirKing, occ) &
+                        pieces_bb(b, us, QUEEN, BISHOP));
                 }
                 case CASTLING: {
                         Square kf = from, rf = to;
                         Square kt = relative_sq(rf > kf ? SQ_G1 : SQ_C1, us);
                         Square rt = relative_sq(rf > kf ? SQ_F1 : SQ_D1, us);
                         return (PseudoMoves[ROOK][rt] & square_bb(theirKing)) &&
-                            (rook_moves_bb(rt,
-                                 (occupancy_bb(b) ^ square_bb(kf) ^ square_bb(rf)) |
-                                     square_bb(kt) | square_bb(rt)) &
-                                square_bb(theirKing));
+                        (rook_moves_bb(rt,
+                         (occupancy_bb(b) ^ square_bb(kf) ^ square_bb(rf)) |
+                         square_bb(kt) | square_bb(rt)) &
+                        square_bb(theirKing));
                 }
                 default:
                         __builtin_unreachable();
@@ -777,12 +777,12 @@ bool move_is_legal(const Board *b, Move m) {
                 const Square   kingSq = get_king_square(b, us);
                 const Square   capSq  = to - pawn_direction(us);
                 const Bitboard occ    = (occupancy_bb(b) ^ square_bb(from) ^
-                                            square_bb(capSq)) |
-                    square_bb(to);
+                                        square_bb(capSq)) |
+                square_bb(to);
                 return !(rook_moves_bb(kingSq, occ) &
-                           pieces_bb(b, not_color(us), QUEEN, ROOK)) &&
-                    !(bishop_moves_bb(kingSq, occ) &
-                        pieces_bb(b, not_color(us), QUEEN, BISHOP));
+                       pieces_bb(b, not_color(us), QUEEN, ROOK)) &&
+                !(bishop_moves_bb(kingSq, occ) &
+                pieces_bb(b, not_color(us), QUEEN, BISHOP));
         }
         if (move_type(m) == CASTLING) {
                 to             = relative_sq((to > from ? SQ_G1 : SQ_C1), us);
@@ -791,13 +791,13 @@ bool move_is_legal(const Board *b, Move m) {
                         if (attackers_to(b, sq) & color_bb(b, not_color(us)))
                                 return false;
                 return !b->chess960 ||
-                    !(rook_moves_bb(to, occupancy_bb(b) ^ square_bb(to_sq(m))) &
-                        pieces_bb(b, not_color(us), ROOK, QUEEN));
+                !(rook_moves_bb(to, occupancy_bb(b) ^ square_bb(to_sq(m))) &
+                pieces_bb(b, not_color(us), ROOK, QUEEN));
         }
         if (piece_type(piece_on(b, from)) == KING)
                 return (!(attackers_to(b, to) & color_bb(b, not_color(us))));
         return !(b->stack->kingBlockers[us] & square_bb(from)) ||
-            sq_aligned(from, to, get_king_square(b, us));
+        sq_aligned(from, to, get_king_square(b, us));
 }
 
 bool move_pseudo_legal(const Board *b, Move m) {
@@ -819,11 +819,11 @@ bool move_pseudo_legal(const Board *b, Move m) {
                 if ((RANK_8_BB | RANK_1_BB) & square_bb(to))
                         return false;
                 if (!(pawn_moves(from, us) & color_bb(b, not_color(us)) &
-                        square_bb(to)) &&
-                    !((from + pawn_direction(us) == to) && empty_square(b, to)) &&
-                    !((from + 2 * pawn_direction(us) == to) &&
-                        relative_sq_rank(from, us) == RANK_2 && empty_square(b, to) &&
-                        empty_square(b, to - pawn_direction(us))))
+                    square_bb(to)) &&
+                !((from + pawn_direction(us) == to) && empty_square(b, to)) &&
+                !((from + 2 * pawn_direction(us) == to) &&
+                relative_sq_rank(from, us) == RANK_2 && empty_square(b, to) &&
+                empty_square(b, to - pawn_direction(us))))
                         return false;
         } else if (!(piece_moves(piece_type(pc), from, occupancy_bb(b)) & square_bb(to)))
                 return false;
@@ -832,12 +832,12 @@ bool move_pseudo_legal(const Board *b, Move m) {
                         if (more_than_one(b->stack->checkers))
                                 return false;
                         if (!((between_bb(bb_first_sq(b->stack->checkers),
-                                   get_king_square(b, us)) |
-                                  b->stack->checkers) &
-                                square_bb(to)))
+                               get_king_square(b, us)) |
+                              b->stack->checkers) &
+                            square_bb(to)))
                                 return false;
                 } else if (attackers_list(b, to, occupancy_bb(b) ^ square_bb(from)) &
-                    color_bb(b, not_color(us)))
+                color_bb(b, not_color(us)))
                         return false;
         }
         return true;
@@ -856,13 +856,10 @@ bool see_greater_than(const Board *b, Move m, Score threshold) {
 
         /* order: PAWN, KNIGHT, BISHOP, ROOK, QUEEN.
            reveal: 1 = diagonal sliders, 2 = orthogonal sliders, 3 = both. */
-        static const PieceType PT[5]     = {PAWN, KNIGHT, BISHOP, ROOK, QUEEN};
-        static const Score     VALUE[5]  = {PAWN_MG_SCORE,
-            KNIGHT_MG_SCORE,
-            BISHOP_MG_SCORE,
-            ROOK_MG_SCORE,
-            QUEEN_MG_SCORE};
-        static const int       REVEAL[5] = {1, 0, 1, 2, 3};
+        static const PieceType PT[5]    = {PAWN, KNIGHT, BISHOP, ROOK, QUEEN};
+        static const Score     VALUE[5] = {
+        PAWN_MG_SCORE, KNIGHT_MG_SCORE, BISHOP_MG_SCORE, ROOK_MG_SCORE, QUEEN_MG_SCORE};
+        static const int REVEAL[5] = {1, 0, 1, 2, 3};
 
         Bitboard occ       = occupancy_bb(b) ^ square_bb(from) ^ square_bb(to);
         Bitboard attackers = attackers_list(b, to, occ);
@@ -895,10 +892,10 @@ bool see_greater_than(const Board *b, Move m, Score threshold) {
                 occ ^= square_bb(bb_first_sq(bb));
                 if (REVEAL[i] & 1)
                         attackers |= bishop_moves_bb(to, occ) &
-                            piecetypes_bb(b, BISHOP, QUEEN);
+                        piecetypes_bb(b, BISHOP, QUEEN);
                 if (REVEAL[i] & 2)
                         attackers |= rook_moves_bb(to, occ) &
-                            piecetypes_bb(b, ROOK, QUEEN);
+                        piecetypes_bb(b, ROOK, QUEEN);
         }
 
         return result;

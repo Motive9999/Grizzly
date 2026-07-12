@@ -11,7 +11,7 @@
 #include <time.h>
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L &&                          \
-    !defined(__STDC_NO_ATOMICS__)
+!defined(__STDC_NO_ATOMICS__)
 #include <stdatomic.h>
 #else
 typedef volatile bool atomic_bool;
@@ -325,7 +325,7 @@ INLINED Bitboard sq_rank_bb(Square sq) {
 }
 INLINED Bitboard between_bb(Square sq1, Square sq2) {
         return LineBB[sq1][sq2] &
-            ((ALL_BB << (sq1 + (sq1 < sq2))) ^ (ALL_BB << (sq2 + !(sq1 < sq2))));
+        ((ALL_BB << (sq1 + (sq1 < sq2))) ^ (ALL_BB << (sq2 + !(sq1 < sq2))));
 }
 INLINED bool sq_aligned(Square sq1, Square sq2, Square sq3) {
         return LineBB[sq1][sq2] & square_bb(sq3);
@@ -440,9 +440,9 @@ add_cap_history(capture_history_t hist, Piece pc, Square to, Piece cap, int32_t 
         *e += bonus - (int32_t)*e * abs(bonus) / HistoryResolution;
 }
 INLINED Score get_cap_history_score(const capture_history_t hist,
-    Piece                                                   pc,
-    Square                                                  to,
-    Piece                                                   cap) {
+Piece                                                       pc,
+Square                                                      to,
+Piece                                                       cap) {
         return hist[pc][to][piece_type(cap)] / HistoryScale;
 }
 
@@ -452,7 +452,7 @@ typedef struct Boardstack {
         HashKey  pawnKey, materialKey, boardKey;
         Score    material[COLOR_NB];
         Bitboard checkers, kingBlockers[COLOR_NB], pinners[COLOR_NB],
-            checkSquares[PIECETYPE_NB];
+        checkSquares[PIECETYPE_NB];
         Piece              capturedPiece;
         struct Boardstack *prev;
         int                repetition;
@@ -476,11 +476,11 @@ extern Board UciBoard;
 void        cyclic_init(void);
 Bitboard    attackers_list(const Board *b, Square s, Bitboard occ);
 void        do_castling(Board *restrict b,
-    Color  us,
-    Square kf,
-    Square *restrict kt,
-    Square *restrict rf,
-    Square *restrict rt);
+Color  us,
+Square kf,
+Square *restrict kt,
+Square *restrict rf,
+Square *restrict rt);
 void        do_move_gc(Board *restrict b, Move m, Boardstack *restrict s, bool gc);
 void        do_null_move(Board *restrict b, Boardstack *restrict s);
 const char *board_fen(const Board *b);
@@ -494,15 +494,15 @@ int         board_from_fen(Board *b, const char *fen, bool is960, Boardstack *bs
 void        set_boardstack(Board *b, Boardstack *s);
 void        set_check(Board *restrict b, Boardstack *restrict s);
 Bitboard    slider_blockers(const Board *restrict b,
-    Bitboard sliders,
-    Square   sq,
-    Bitboard *restrict pinners);
+Bitboard sliders,
+Square   sq,
+Bitboard *restrict pinners);
 void        undo_castling(Board *restrict b,
-    Color  us,
-    Square kf,
-    Square *restrict kt,
-    Square *restrict rf,
-    Square *restrict rt);
+Color  us,
+Square kf,
+Square *restrict kt,
+Square *restrict rf,
+Square *restrict rt);
 void        undo_move(Board *b, Move m);
 void        undo_null_move(Board *b);
 Boardstack *dup_boardstack(const Boardstack *s);
@@ -664,12 +664,12 @@ typedef struct {
 void  init_search_tables(void);
 Score qsearch(bool pvNode, Board *b, Score alpha, Score beta, Searchstack *ss);
 Score search(bool pvNode,
-    Board        *b,
-    int           depth,
-    Score         alpha,
-    Score         beta,
-    Searchstack  *ss,
-    bool          cutNode);
+Board            *b,
+int               depth,
+Score             alpha,
+Score             beta,
+Searchstack      *ss,
+bool              cutNode);
 
 typedef struct {
         HashKey  key;
@@ -791,11 +791,11 @@ void  worker_start_search(Worker *w);
 void  worker_wait_search_end(Worker *w);
 void *worker_entry(void *w);
 void  search_print_root_info(Board *b,
-    Worker                        *w,
-    int                            mpv,
-    int                            iter,
-    clock_t                        time,
-    int                            bound);
+Worker                            *w,
+int                                mpv,
+int                                iter,
+clock_t                            time,
+int                                bound);
 
 typedef struct {
         size_t      size;
@@ -901,12 +901,12 @@ extern Timeman SearchTimeman;
 
 void timeman_init(const Board *b, Timeman *tm, SearchParams *params, clock_t start);
 void timeman_update(Timeman *tm,
-    const Board             *b,
-    Move                     bestmove,
-    Score                    score,
-    int                      seldepth,
-    int                      rootDepth,
-    int                      aspFails);
+const Board                 *b,
+Move                         bestmove,
+Score                        score,
+int                          seldepth,
+int                          rootDepth,
+int                          aspFails);
 void check_time(void);
 
 INLINED bool timeman_must_stop_search(Timeman *tm, clock_t cur) {

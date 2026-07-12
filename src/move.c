@@ -27,10 +27,10 @@ void place_top_move(ExtendedMove *begin, ExtendedMove *end) {
 }
 
 ExtendedMove *generate_piece_moves(ExtendedMove *restrict ml,
-    const Board *restrict b,
-    Color     us,
-    PieceType pt,
-    Bitboard  target) {
+const Board *restrict b,
+Color     us,
+PieceType pt,
+Bitboard  target) {
         Bitboard bb  = piece_bb(b, us, pt);
         Bitboard occ = occupancy_bb(b);
         while (bb) {
@@ -43,13 +43,13 @@ ExtendedMove *generate_piece_moves(ExtendedMove *restrict ml,
 }
 
 ExtendedMove *generate_pawn_capture_moves(ExtendedMove *restrict ml,
-    const Board *restrict b,
-    Color    us,
-    Bitboard theirPcs,
-    bool     inQs) {
+const Board *restrict b,
+Color    us,
+Bitboard theirPcs,
+bool     inQs) {
         int      push        = pawn_direction(us);
         Bitboard pawnsOnLast = piece_bb(b, us, PAWN) &
-            (us == WHITE ? RANK_7_BB : RANK_2_BB);
+        (us == WHITE ? RANK_7_BB : RANK_2_BB);
         Bitboard pawnsNotOnLast = piece_bb(b, us, PAWN) & ~pawnsOnLast;
         Bitboard empty          = ~occupancy_bb(b);
 
@@ -87,10 +87,10 @@ ExtendedMove *generate_pawn_capture_moves(ExtendedMove *restrict ml,
 
         if (b->stack->enPassantSquare != SQ_NONE) {
                 Bitboard capEP = pawnsNotOnLast &
-                    pawn_moves(b->stack->enPassantSquare, not_color(us));
+                pawn_moves(b->stack->enPassantSquare, not_color(us));
                 while (capEP)
                         (ml++)->move = create_en_passant(bb_pop_first_sq(&capEP),
-                            b->stack->enPassantSquare);
+                        b->stack->enPassantSquare);
         }
         return ml;
 }
@@ -112,12 +112,12 @@ ExtendedMove *
 generate_quiet_pawn_moves(ExtendedMove *restrict ml, const Board *restrict b, Color us) {
         int      push           = pawn_direction(us);
         Bitboard pawnsNotOnLast = piece_bb(b, us, PAWN) &
-            ~(us == WHITE ? RANK_7_BB : RANK_2_BB);
+        ~(us == WHITE ? RANK_7_BB : RANK_2_BB);
         Bitboard empty = ~occupancy_bb(b);
         Bitboard push1 = relative_shift_up(pawnsNotOnLast, us) & empty;
         Bitboard push2 = relative_shift_up(push1 & (us == WHITE ? RANK_3_BB : RANK_6_BB),
-                             us) &
-            empty;
+                         us) &
+        empty;
         while (push1) {
                 Square to    = bb_pop_first_sq(&push1);
                 (ml++)->move = create_move(to - push, to);
@@ -149,18 +149,18 @@ ExtendedMove *generate_quiet(ExtendedMove *restrict ml, const Board *restrict b)
 }
 
 ExtendedMove *generate_classic_pawn_moves(ExtendedMove *restrict ml,
-    const Board *restrict b,
-    Color us) {
+const Board *restrict b,
+Color us) {
         int      push        = pawn_direction(us);
         Bitboard pawnsOnLast = piece_bb(b, us, PAWN) &
-            (us == WHITE ? RANK_7_BB : RANK_2_BB);
+        (us == WHITE ? RANK_7_BB : RANK_2_BB);
         Bitboard pawnsNotOnLast = piece_bb(b, us, PAWN) & ~pawnsOnLast;
         Bitboard empty          = ~occupancy_bb(b);
         Bitboard theirPcs       = color_bb(b, not_color(us));
         Bitboard push1          = relative_shift_up(pawnsNotOnLast, us) & empty;
         Bitboard push2 = relative_shift_up(push1 & (us == WHITE ? RANK_3_BB : RANK_6_BB),
-                             us) &
-            empty;
+                         us) &
+        empty;
         while (push1) {
                 Square to    = bb_pop_first_sq(&push1);
                 (ml++)->move = create_move(to - push, to);
@@ -189,10 +189,10 @@ ExtendedMove *generate_classic_pawn_moves(ExtendedMove *restrict ml,
         }
         if (b->stack->enPassantSquare != SQ_NONE) {
                 Bitboard capEP = pawnsNotOnLast &
-                    pawn_moves(b->stack->enPassantSquare, not_color(us));
+                pawn_moves(b->stack->enPassantSquare, not_color(us));
                 while (capEP)
                         (ml++)->move = create_en_passant(bb_pop_first_sq(&capEP),
-                            b->stack->enPassantSquare);
+                        b->stack->enPassantSquare);
         }
         return ml;
 }
@@ -217,19 +217,19 @@ ExtendedMove *generate_classic(ExtendedMove *restrict ml, const Board *restrict 
 }
 
 ExtendedMove *generate_pawn_evasion_moves(ExtendedMove *restrict ml,
-    const Board *restrict b,
-    Bitboard blockSqs,
-    Color    us) {
+const Board *restrict b,
+Bitboard blockSqs,
+Color    us) {
         int      push        = pawn_direction(us);
         Bitboard pawnsOnLast = piece_bb(b, us, PAWN) &
-            (us == WHITE ? RANK_7_BB : RANK_2_BB);
+        (us == WHITE ? RANK_7_BB : RANK_2_BB);
         Bitboard pawnsNotOnLast = piece_bb(b, us, PAWN) & ~pawnsOnLast;
         Bitboard empty          = ~occupancy_bb(b);
         Bitboard theirPcs       = color_bb(b, not_color(us)) & blockSqs;
         Bitboard push1          = relative_shift_up(pawnsNotOnLast, us) & empty;
         Bitboard push2 = relative_shift_up(push1 & (us == WHITE ? RANK_3_BB : RANK_6_BB),
-                             us) &
-            empty;
+                         us) &
+        empty;
         push1 &= blockSqs;
         push2 &= blockSqs;
         while (push1) {
@@ -263,10 +263,10 @@ ExtendedMove *generate_pawn_evasion_moves(ExtendedMove *restrict ml,
                 if (!(blockSqs & square_bb(b->stack->enPassantSquare - push)))
                         return ml;
                 Bitboard capEP = pawnsNotOnLast &
-                    pawn_moves(b->stack->enPassantSquare, not_color(us));
+                pawn_moves(b->stack->enPassantSquare, not_color(us));
                 while (capEP)
                         (ml++)->move = create_en_passant(bb_pop_first_sq(&capEP),
-                            b->stack->enPassantSquare);
+                        b->stack->enPassantSquare);
         }
         return ml;
 }
@@ -301,8 +301,8 @@ ExtendedMove *generate_all(ExtendedMove *restrict ml, const Board *restrict b) {
         ml = b->stack->checkers ? generate_evasions(ml, b) : generate_classic(ml, b);
         while (cur < ml) {
                 if ((pinned || from_sq(cur->move) == kingSq ||
-                        move_type(cur->move) == EN_PASSANT) &&
-                    !move_is_legal(b, cur->move))
+                    move_type(cur->move) == EN_PASSANT) &&
+                !move_is_legal(b, cur->move))
                         cur->move = (--ml)->move;
                 else
                         ++cur;

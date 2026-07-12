@@ -18,12 +18,16 @@ AllowAllArgumentsOnNextLine:               true
 AllowAllParametersOfDeclarationOnNextLine: true
 
 AlignAfterOpenBracket:                     DontAlign
-ContinuationIndentWidth:                   4
+ContinuationIndentWidth:                   0
 
 AlignConsecutiveAssignments:               Consecutive
 AlignConsecutiveDeclarations:              Consecutive
 AlignConsecutiveMacros:                    Consecutive
 AlignOperands:                             DontAlign
+
+AlignTrailingComments:
+  Kind:                                    Always
+  OverEmptyLines:                          2
 
 BreakBeforeBinaryOperators:                None
 BreakBeforeTernaryOperators:               true

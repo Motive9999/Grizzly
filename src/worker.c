@@ -30,8 +30,8 @@ double score_difference_scale(score_t s) {
 
 int lmr_base_value(int depth, int moves, bool improving, bool quiet) {
         return (-415 + Reductions[quiet][depth] * Reductions[quiet][moves] +
-                   !improving * 538) /
-            1024;
+               !improving * 538) /
+        1024;
 }
 
 void init_search_tables(void) {
@@ -80,8 +80,8 @@ void timeman_init(const Board *b, Timeman *tm, SearchParams *p, clock_t start) {
         } else if (p->movetime) {
                 tm->mode        = Movetime;
                 tm->averageTime = tm->maximalTime = tm->optimalTime = (p->movetime <= oh)
-                    ? 1
-                    : (p->movetime - oh);
+                ? 1
+                : (p->movetime - oh);
         } else {
                 tm->mode = NoTimeman;
         }
@@ -91,12 +91,12 @@ void timeman_init(const Board *b, Timeman *tm, SearchParams *p, clock_t start) {
 }
 
 void timeman_update(Timeman *tm,
-    const Board             *b,
-    move_t                   best,
-    score_t                  score,
-    int                      seldepth,
-    int                      rootDepth,
-    int                      aspFails) {
+const Board                 *b,
+move_t                       best,
+score_t                      score,
+int                          seldepth,
+int                          rootDepth,
+int                          aspFails) {
         (void)b;
         if (tm->mode != Tournament)
                 return;
@@ -113,7 +113,7 @@ void timeman_update(Timeman *tm,
         scale *= 1.0 + 0.15 * imin(aspFails, 2);
         tm->prevScore   = score;
         tm->optimalTime = timemin(tm->maximalTime,
-            (clock_t)fmin(tm->averageTime * scale, tm->averageTime * 4.0));
+        (clock_t)fmin(tm->averageTime * scale, tm->averageTime * 4.0));
 }
 
 void check_time(void) {
@@ -123,7 +123,7 @@ void check_time(void) {
         if (UciSearchParams.infinite || wpool_is_stopped(&SearchWorkerPool))
                 return;
         if (wpool_get_total_nodes(&SearchWorkerPool) >= UciSearchParams.nodes ||
-            timeman_must_stop_search(&SearchTimeman, chess_clock()))
+        timeman_must_stop_search(&SearchTimeman, chess_clock()))
                 wpool_stop(&SearchWorkerPool);
 }
 
@@ -156,7 +156,7 @@ void worker_init(Worker *w, size_t idx) {
         w->exit      = false;
         w->searching = true;
         if (pthread_mutex_init(&w->mutex, NULL) || pthread_cond_init(&w->condVar, NULL) ||
-            pthread_create(&w->thread, &WorkerSettings, &worker_entry, w))
+        pthread_create(&w->thread, &WorkerSettings, &worker_entry, w))
                 die("Worker initialization failed");
 }
 
@@ -258,10 +258,10 @@ void wpool_start_search(WorkerPool *wp, const Board *root, const SearchParams *s
                         die("Root moves allocation failed");
                 for (size_t k = 0; k < w->rootCount; ++k) {
                         w->rootMoves[k] = (RootMove){.move = UciSearchMoves.moves[k].move,
-                            .seldepth                      = 0,
-                            .score                         = -INF_SCORE,
-                            .prevScore                     = -INF_SCORE,
-                            .pv                            = {NO_MOVE, NO_MOVE}};
+                        .seldepth                          = 0,
+                        .score                             = -INF_SCORE,
+                        .prevScore                         = -INF_SCORE,
+                        .pv                                = {NO_MOVE, NO_MOVE}};
                 }
         }
         worker_start_search(wpool_main_worker(wp));
@@ -281,7 +281,7 @@ uint64_t wpool_get_total_nodes(WorkerPool *wp) {
         uint64_t total = 0;
         for (size_t i = 0; i < wp->size; ++i)
                 total += atomic_load_explicit(&wp->workerList[i]->nodes,
-                    memory_order_relaxed);
+                memory_order_relaxed);
         return total;
 }
 
@@ -293,9 +293,9 @@ void main_worker_search(Worker *w) {
                 t              = chess_clock() - t;
                 uint64_t nps   = nodes / (t + !t) * 1000;
                 printf("info nodes %" FMT_INFO " nps %" FMT_INFO " time %" FMT_INFO "\n",
-                    (info_t)nodes,
-                    (info_t)nps,
-                    (info_t)t);
+                (info_t)nodes,
+                (info_t)nps,
+                (info_t)t);
                 return;
         }
         if (w->rootCount == 0) {
@@ -313,7 +313,7 @@ void main_worker_search(Worker *w) {
                 worker_search(w);
         }
         while (!wpool_is_stopped(&SearchWorkerPool) &&
-            (wpool_is_pondering(&SearchWorkerPool) || UciSearchParams.infinite))
+        (wpool_is_pondering(&SearchWorkerPool) || UciSearchParams.infinite))
                 ;
         wpool_stop(&SearchWorkerPool);
         if (w->rootCount == 0) {
@@ -362,11 +362,11 @@ void worker_search(Worker *w) {
                         search(true, b, depth + 1, alpha, beta, &ss[4], false);
                         aborted = wpool_is_stopped(&SearchWorkerPool);
                         sort_root_moves(w->rootMoves + w->pvLine,
-                            w->rootMoves + w->rootCount);
+                        w->rootMoves + w->rootCount);
                         pvScore   = w->rootMoves[w->pvLine].score;
                         int bound = abs(pvScore) == INF_SCORE ? EXACT_BOUND
-                            : pvScore >= beta                 ? LOWER_BOUND
-                            : pvScore <= alpha                ? UPPER_BOUND
+                        : pvScore >= beta                     ? LOWER_BOUND
+                        : pvScore <= alpha                    ? UPPER_BOUND
                                                               : EXACT_BOUND;
                         if (aborted)
                                 break;
@@ -389,11 +389,11 @@ void worker_search(Worker *w) {
                         sort_root_moves(w->rootMoves, w->rootMoves + multiPv);
 
                         search_print_root_info(b,
-                            w,
-                            w->pvLine + 1,
-                            iter,
-                            chess_clock() - SearchTimeman.start,
-                            EXACT_BOUND);
+                        w,
+                        w->pvLine + 1,
+                        iter,
+                        chess_clock() - SearchTimeman.start,
+                        EXACT_BOUND);
                 }
                 for (RootMove *i = w->rootMoves; i < w->rootMoves + w->rootCount; ++i) {
                         i->prevScore = i->score;
@@ -403,22 +403,22 @@ void worker_search(Worker *w) {
                         break;
                 if (!w->idx) {
                         timeman_update(&SearchTimeman,
-                            b,
-                            w->rootMoves->move,
-                            w->rootMoves->prevScore,
-                            w->seldepth,
-                            w->rootDepth,
-                            aspFails);
+                        b,
+                        w->rootMoves->move,
+                        w->rootMoves->prevScore,
+                        w->seldepth,
+                        w->rootDepth,
+                        aspFails);
                         clock_t elapsed = chess_clock() - SearchTimeman.start;
                         if (SearchTimeman.mode != NoTimeman &&
-                            elapsed * 5 >= SearchTimeman.optimalTime * 3)
+                        elapsed * 5 >= SearchTimeman.optimalTime * 3)
                                 break;
                 }
                 if (iter >= 18 && abs(w->rootMoves->prevScore) > MATE_FOUND &&
-                    abs(w->rootMoves->prevScore) >= mate_in(MAX_PLIES - 1))
+                abs(w->rootMoves->prevScore) >= mate_in(MAX_PLIES - 1))
                         break;
                 if (UciSearchParams.mate &&
-                    abs(w->rootMoves->prevScore) >= mate_in(UciSearchParams.mate * 2))
+                abs(w->rootMoves->prevScore) >= mate_in(UciSearchParams.mate * 2))
                         break;
                 if (w->idx && iter == maxDepth - 1)
                         --iter;

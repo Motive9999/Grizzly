@@ -16,9 +16,38 @@ ScorePair PsqScore[PIECE_NB][SQUARE_NB];
 #define V_Q_MG 950
 #define V_Q_EG 1000
 
-const Score PieceScores[PHASE_NB][PIECE_NB] = {
-        {0, V_P_MG, V_N_MG, V_B_MG, V_R_MG, V_Q_MG, 0, 0, 0, V_P_MG, V_N_MG, V_B_MG, V_R_MG, V_Q_MG, 0, 0},
-        {0, V_P_EG, V_N_EG, V_B_EG, V_R_EG, V_Q_EG, 0, 0, 0, V_P_EG, V_N_EG, V_B_EG, V_R_EG, V_Q_EG, 0, 0}};
+const Score PieceScores[PHASE_NB][PIECE_NB] = {{0,
+                                               V_P_MG,
+                                               V_N_MG,
+                                               V_B_MG,
+                                               V_R_MG,
+                                               V_Q_MG,
+                                               0,
+                                               0,
+                                               0,
+                                               V_P_MG,
+                                               V_N_MG,
+                                               V_B_MG,
+                                               V_R_MG,
+                                               V_Q_MG,
+                                               0,
+                                               0},
+{0,
+V_P_EG,
+V_N_EG,
+V_B_EG,
+V_R_EG,
+V_Q_EG,
+0,
+0,
+0,
+V_P_EG,
+V_N_EG,
+V_B_EG,
+V_R_EG,
+V_Q_EG,
+0,
+0}};
 
 #ifndef NN_SCALE
 #define NN_SCALE 400.0f
@@ -46,7 +75,8 @@ typedef struct {
         uint8_t   valid;
 } EvalCacheEntry;
 
-/* Thread-locals are zero-initialized per thread; no explicit clearing needed. */
+/* Thread-locals are zero-initialized per thread; no explicit clearing needed.
+ */
 static _Thread_local EvalCacheEntry EvalCache[NN_EVAL_CACHE_SIZE];
 
 static float NN_FC1_W_F32[NN_INPUTS * NN_HIDDEN_1];
@@ -108,7 +138,7 @@ static Score phased_material_eval(const Board *b) {
         mg += (wq - bq) * V_Q_MG, eg += (wq - bq) * V_Q_EG;
 
         int phase = PHASE_N * (wn + bn) + PHASE_B * (wb + bb) + PHASE_R * (wr + br) +
-            PHASE_Q * (wq + bq);
+        PHASE_Q * (wq + bq);
 
         Score s = blend_score(mg, eg, phase);
 
@@ -228,8 +258,8 @@ static inline void nn_add_row(float *restrict h, int feature) {
 }
 
 static void nn_accumulate_both(const Board *b,
-    float                                   white[restrict NN_HIDDEN_1],
-    float                                   black[restrict NN_HIDDEN_1]) {
+float                                       white[restrict NN_HIDDEN_1],
+float                                       black[restrict NN_HIDDEN_1]) {
         Square wk = get_king_square(b, WHITE);
         Square bk = get_king_square(b, BLACK);
 
@@ -287,11 +317,11 @@ static Score nn_eval_cp(const Board *b) {
 
         float s = (b->sideToMove == WHITE ? nn_output(white, black)
                                           : nn_output(black, white)) *
-            NN_SCALE;
+        NN_SCALE;
 
-        s = s > NN_OUTPUT_CLIP    ? NN_OUTPUT_CLIP
-            : s < -NN_OUTPUT_CLIP ? -NN_OUTPUT_CLIP
-                                  : s;
+        s = s > NN_OUTPUT_CLIP ? NN_OUTPUT_CLIP
+        : s < -NN_OUTPUT_CLIP  ? -NN_OUTPUT_CLIP
+                               : s;
 
         return (Score)s;
 }

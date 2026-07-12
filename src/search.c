@@ -100,11 +100,11 @@ uint64_t perft(Board *b, unsigned d) {
 }
 
 void update_quiet_stats(const Board *b,
-    int                              d,
-    move_t                           best,
-    const move_t                     quiets[64],
-    int                              qc,
-    Searchstack                     *ss) {
+int                                  d,
+move_t                               best,
+const move_t                         quiets[64],
+int                                  qc,
+Searchstack                         *ss) {
         Worker  *w     = get_worker(b);
         int      bonus = history_bonus(d);
         piece_t  pc    = piece_on(b, from_sq(best));
@@ -124,11 +124,11 @@ void update_quiet_stats(const Board *b,
 }
 
 void update_capture_stats(const Board *b,
-    int                                d,
-    move_t                             best,
-    const move_t                       caps[64],
-    int                                cc,
-    Searchstack                       *ss) {
+int                                    d,
+move_t                                 best,
+const move_t                           caps[64],
+int                                    cc,
+Searchstack                           *ss) {
         (void)ss;
         Worker *w     = get_worker(b);
         int     bonus = history_bonus(d);
@@ -174,11 +174,11 @@ static void rank_evasions(Movepicker *mp, ExtendedMove *bg, ExtendedMove *ed) {
 }
 
 void movepicker_setup(Movepicker *mp,
-    bool                          qs,
-    const Board                  *b,
-    const Worker                 *w,
-    move_t                        tt,
-    Searchstack                  *ss) {
+bool                              qs,
+const Board                      *b,
+const Worker                     *w,
+move_t                            tt,
+Searchstack                      *ss) {
         mp->inQsearch = qs;
         mp->board     = b;
         mp->worker    = w;
@@ -189,8 +189,7 @@ void movepicker_setup(Movepicker *mp,
                 mp->stage = CHECK_PICK_TT + !(tt && move_pseudo_legal(b, tt));
         else
                 mp->stage = PICK_TT +
-                    !(tt && (!qs || capture_or_promotion(b, tt)) &&
-                        move_pseudo_legal(b, tt));
+                !(tt && (!qs || capture_or_promotion(b, tt)) && move_pseudo_legal(b, tt));
         mp->pieceHistory[0] = (ss - 1)->pieceHistory;
         mp->pieceHistory[1] = (ss - 2)->pieceHistory;
 }
@@ -205,8 +204,8 @@ top:
                 case GEN_INSTABLE:
                         ++mp->stage;
                         mp->list.last = generate_captures(mp->list.moves,
-                            mp->board,
-                            mp->inQsearch);
+                        mp->board,
+                        mp->inQsearch);
                         rank_captures(mp, mp->list.moves, mp->list.last);
                         mp->cur = mp->badCaptures = mp->list.moves;
                         FALL;
@@ -214,7 +213,7 @@ top:
                         while (mp->cur < mp->list.last) {
                                 place_top_move(mp->cur, mp->list.last);
                                 if (mp->cur->move != mp->ttMove &&
-                                    see_greater_than(mp->board, mp->cur->move, see_th))
+                                see_greater_than(mp->board, mp->cur->move, see_th))
                                         return (mp->cur++)->move;
                                 *(mp->badCaptures++) = *(mp->cur++);
                         }
@@ -228,14 +227,14 @@ top:
                 case PICK_KILLER1:
                         ++mp->stage;
                         if (mp->killer1 && mp->killer1 != mp->ttMove &&
-                            move_pseudo_legal(mp->board, mp->killer1))
+                        move_pseudo_legal(mp->board, mp->killer1))
                                 return mp->killer1;
                         FALL;
                 case PICK_KILLER2:
                         ++mp->stage;
                         if (mp->killer2 && mp->killer2 != mp->ttMove &&
-                            mp->killer2 != mp->killer1 &&
-                            move_pseudo_legal(mp->board, mp->killer2))
+                        mp->killer2 != mp->killer1 &&
+                        move_pseudo_legal(mp->board, mp->killer2))
                                 return mp->killer2;
                         FALL;
                 case PICK_COUNTER:
@@ -254,7 +253,7 @@ top:
                                         place_top_move(mp->cur, mp->list.last);
                                         move_t m = (mp->cur++)->move;
                                         if (m != mp->ttMove && m != mp->killer1 &&
-                                            m != mp->killer2)
+                                        m != mp->killer2)
                                                 return m;
                                 }
                         }
@@ -287,12 +286,12 @@ top:
 }
 
 score_t search(bool isPV,
-    Board          *b,
-    int             depth,
-    score_t         alpha,
-    score_t         beta,
-    Searchstack    *ss,
-    bool            cut) {
+Board              *b,
+int                 depth,
+score_t             alpha,
+score_t             beta,
+Searchstack        *ss,
+bool                cut) {
         // Node setup
         bool    root = ss->plies == 0;
         Worker *w    = get_worker(b);
@@ -345,11 +344,11 @@ score_t search(bool isPV,
                 ttMove  = e->bestmove;
 
                 if (ttDepth >= depth && !isPV && b->stack->rule50 < 96 &&
-                    (abs(ttScore) < VICTORY || ttBound == EXACT_BOUND) &&
-                    (((ttBound & LOWER_BOUND) && ttScore >= beta) ||
-                        ((ttBound & UPPER_BOUND) && ttScore <= alpha))) {
+                (abs(ttScore) < VICTORY || ttBound == EXACT_BOUND) &&
+                (((ttBound & LOWER_BOUND) && ttScore >= beta) ||
+                ((ttBound & UPPER_BOUND) && ttScore <= alpha))) {
                         if ((ttBound & LOWER_BOUND) && ttMove &&
-                            !capture_or_promotion(b, ttMove))
+                        !capture_or_promotion(b, ttMove))
                                 update_quiet_stats(b, depth, ttMove, NULL, 0, ss);
                         return ttScore;
                 }
@@ -381,16 +380,15 @@ score_t search(bool isPV,
 
         // Reverse futility pruning
         if (!isPV && depth <= 8 &&
-            eval - RFP_MARGIN_PER_DEPTH * depth + RFP_IMPROVING_BONUS * improving >=
-                beta &&
-            eval < VICTORY)
+        eval - RFP_MARGIN_PER_DEPTH * depth + RFP_IMPROVING_BONUS * improving >= beta &&
+        eval < VICTORY)
                 return (716 * beta + 308 * eval) / 1024;
 
         // Null-move pruning
         if (!isPV && depth >= 3 && ss->plies >= w->verifPlies && !ss->excludedMove &&
-            eval >= beta && eval >= ss->staticEval && b->stack->material[b->sideToMove]) {
+        eval >= beta && eval >= ss->staticEval && b->stack->material[b->sideToMove]) {
                 Boardstack st;
-                int        R = (792 + 67 * depth) / 256 + imin((eval - beta) / 109, 5);
+                int        R    = (792 + 67 * depth) / 256 + imin((eval - beta) / 109, 5);
                 ss->currentMove = NULL_MOVE;
                 ss->pieceHistory = NULL;
                 do_null_move(b, &st);
@@ -403,13 +401,8 @@ score_t search(bool isPV,
                         if (w->verifPlies || (depth <= 12 && abs(beta) < VICTORY))
                                 return s;
                         w->verifPlies = ss->plies + (depth - R) * 3 / 4;
-                        score_t v = search(false,
-                            b,
-                            depth - R,
-                            beta - 1,
-                            beta,
-                            ss,
-                            false);
+                        score_t
+                        v = search(false, b, depth - R, beta - 1, beta, ss, false);
                         w->verifPlies = 0;
                         if (v >= beta)
                                 return s;
@@ -419,7 +412,7 @@ score_t search(bool isPV,
         // ProbCut
         score_t pcBeta = beta + 214 - 59 * improving;
         if (!root && depth >= 6 && abs(beta) < VICTORY &&
-            !(found && ttDepth >= depth - 4 && ttScore < pcBeta)) {
+        !(found && ttDepth >= depth - 4 && ttScore < pcBeta)) {
                 score_t    pcSEE = pcBeta - ss->staticEval;
                 Movepicker mp;
                 move_t     m, pcTT = NO_MOVE;
@@ -447,12 +440,12 @@ score_t search(bool isPV,
                                 continue;
 
                         tt_save(e,
-                            key,
-                            TTS(s),
-                            ss->staticEval,
-                            depth - 3,
-                            LOWER_BOUND,
-                            m);
+                        key,
+                        TTS(s),
+                        ss->staticEval,
+                        depth - 3,
+                        LOWER_BOUND,
+                        m);
                         return s;
                 }
         }
@@ -464,12 +457,12 @@ score_t search(bool isPV,
         // Move loop
 move_loop:
         movepicker_setup(&mp, false, b, w, ttMove, ss);
-        move_t  best = NO_MOVE;
-        move_t  m;
-        move_t  pv[256];
-        int     moves = 0;
-        int     qc    = 0;
-        int     cc    = 0;
+        move_t best = NO_MOVE;
+        move_t m;
+        move_t pv[256];
+        int    moves = 0;
+        int    qc    = 0;
+        int    cc    = 0;
 
         move_t  quiets[64];
         move_t  caps[64];
@@ -478,8 +471,8 @@ move_loop:
         while ((m = movepicker_next(&mp, skipQ, 0)) != NO_MOVE) {
                 if (root) {
                         if (!find_root_move(w->rootMoves + w->pvLine,
-                                w->rootMoves + w->rootCount,
-                                m))
+                            w->rootMoves + w->rootCount,
+                            m))
                                 continue;
                 } else {
                         if (!move_is_legal(b, m) || m == ss->excludedMove)
@@ -491,17 +484,16 @@ move_loop:
                         if (depth <= 8 && moves > Pruning[improving][depth])
                                 skipQ = true;
                         if (depth <= 7 && !inCheck && quiet &&
-                            eval + FP_BASE_MARGIN + FP_DEPTH_MARGIN * depth <= alpha)
+                        eval + FP_BASE_MARGIN + FP_DEPTH_MARGIN * depth <= alpha)
                                 skipQ = true;
                         if (depth <= 4 &&
-                            cont_score(b, ss, m) <
-                                CHP_BASE - CHP_DEPTH_SCALE * (depth - 1))
+                        cont_score(b, ss, m) < CHP_BASE - CHP_DEPTH_SCALE * (depth - 1))
                                 continue;
                         if (depth <= 12 &&
-                            !see_greater_than(b,
-                                m,
-                                quiet ? SEE_QUIET_PER_DEPTH * depth
-                                      : SEE_NOISY_PER_DEPTH2 * depth * depth))
+                        !see_greater_than(b,
+                        m,
+                        quiet ? SEE_QUIET_PER_DEPTH * depth
+                              : SEE_NOISY_PER_DEPTH2 * depth * depth))
                                 continue;
                 }
 
@@ -514,24 +506,24 @@ move_loop:
                 int        hist     = quiet ? hist_score(b, w, ss, m) : 0;
                 score_t    s        = -NO_SCORE;
                 if (!root && ss->plies < 2 * w->rootDepth &&
-                    2 * ss->doubleExtensions < w->rootDepth) {
+                2 * ss->doubleExtensions < w->rootDepth) {
                         if (depth >= 8 && m == ttMove && !ss->excludedMove &&
-                            (ttBound & LOWER_BOUND) && abs(ttScore) < VICTORY &&
-                            ttDepth >= depth - 3) {
+                        (ttBound & LOWER_BOUND) && abs(ttScore) < VICTORY &&
+                        ttDepth >= depth - 3) {
                                 score_t sBeta    = ttScore - 11 * depth / 16;
                                 int     sDepth   = depth / 2 + 1;
                                 ss->excludedMove = ttMove;
                                 score_t sScore   = search(false,
-                                    b,
-                                    sDepth,
-                                    sBeta - 1,
-                                    sBeta,
-                                    ss,
-                                    cut);
+                                b,
+                                sDepth,
+                                sBeta - 1,
+                                sBeta,
+                                ss,
+                                cut);
                                 ss->excludedMove = NO_MOVE;
                                 if (sScore < sBeta) {
                                         if (!isPV && sBeta - sScore > 17 &&
-                                            ss->doubleExtensions <= 9) {
+                                        ss->doubleExtensions <= 9) {
                                                 ext = 2;
                                                 ss->doubleExtensions++;
                                         } else {
@@ -560,12 +552,12 @@ move_loop:
                 }
                 if (lmr)
                         s = -search(false,
-                            b,
-                            newDepth - R,
-                            -alpha - 1,
-                            -alpha,
-                            ss + 1,
-                            true);
+                        b,
+                        newDepth - R,
+                        -alpha - 1,
+                        -alpha,
+                        ss + 1,
+                        true);
                 newDepth += ext;
                 if ((R && s > alpha) || (!lmr && !(isPV && moves == 1))) {
                         s = -search(false, b, newDepth, -alpha - 1, -alpha, ss + 1, !cut);
@@ -582,8 +574,8 @@ move_loop:
                         return 0;
                 if (root) {
                         RootMove *rm = find_root_move(w->rootMoves + w->pvLine,
-                            w->rootMoves + w->rootCount,
-                            m);
+                        w->rootMoves + w->rootCount,
+                        m);
                         if (moves == 1 || s > alpha) {
                                 rm->score    = s;
                                 rm->seldepth = w->seldepth;
@@ -603,18 +595,18 @@ move_loop:
                                 if (alpha >= beta) {
                                         if (quiet)
                                                 update_quiet_stats(b,
-                                                    depth,
-                                                    best,
-                                                    quiets,
-                                                    qc,
-                                                    ss);
+                                                depth,
+                                                best,
+                                                quiets,
+                                                qc,
+                                                ss);
                                         if (moves != 1)
                                                 update_capture_stats(b,
-                                                    depth,
-                                                    best,
-                                                    caps,
-                                                    cc,
-                                                    ss);
+                                                depth,
+                                                best,
+                                                caps,
+                                                cc,
+                                                ss);
                                         break;
                                 }
                         }
@@ -629,15 +621,15 @@ move_loop:
                 Score = ss->excludedMove ? alpha : inCheck ? mated_in(ss->plies) : 0;
         if (!root || w->pvLine == 0) {
                 int bound = Score >= beta ? LOWER_BOUND
-                    : (isPV && best)      ? EXACT_BOUND
+                : (isPV && best)          ? EXACT_BOUND
                                           : UPPER_BOUND;
                 tt_save(e,
-                    key,
-                    score_to_tt(Score, ss->plies),
-                    ss->staticEval,
-                    depth,
-                    bound,
-                    best);
+                key,
+                score_to_tt(Score, ss->plies),
+                ss->staticEval,
+                depth,
+                bound,
+                best);
         }
         return Score;
 }
@@ -667,8 +659,8 @@ score_t qsearch(bool isPV, Board *b, score_t alpha, score_t beta, Searchstack *s
                 ttScore = score_from_tt(e->score, ss->plies);
                 ttMove  = e->bestmove;
                 if (!isPV &&
-                    (((ttBound & LOWER_BOUND) && ttScore >= beta) ||
-                        ((ttBound & UPPER_BOUND) && ttScore <= alpha)))
+                (((ttBound & LOWER_BOUND) && ttScore >= beta) ||
+                ((ttBound & UPPER_BOUND) && ttScore <= alpha)))
                         return ttScore;
         }
         bool    inCheck = !!b->stack->checkers;
@@ -688,19 +680,19 @@ score_t qsearch(bool isPV, Board *b, score_t alpha, score_t beta, Searchstack *s
                 if (alpha >= beta) {
                         if (!found)
                                 tt_save(e,
-                                    b->stack->boardKey,
-                                    score_to_tt(Score, ss->plies),
-                                    eval,
-                                    0,
-                                    LOWER_BOUND,
-                                    NO_MOVE);
+                                b->stack->boardKey,
+                                score_to_tt(Score, ss->plies),
+                                eval,
+                                0,
+                                LOWER_BOUND,
+                                NO_MOVE);
                         return alpha;
                 }
         }
 
         Movepicker mp;
         movepicker_setup(&mp, true, b, w, ttMove, ss);
-        move_t  best = NO_MOVE, m, pv[256];
+        move_t  best    = NO_MOVE, m, pv[256];
         int     moves   = 0;
         bool    canFP   = !inCheck && popcount(occupancy_bb(b)) >= 5;
         score_t futBase = Score + QFP_BASE;
@@ -748,14 +740,14 @@ score_t qsearch(bool isPV, Board *b, score_t alpha, score_t beta, Searchstack *s
         if (moves == 0 && inCheck)
                 Score = mated_in(ss->plies);
         int bound = Score >= beta ? LOWER_BOUND
-            : Score <= oldAlpha   ? UPPER_BOUND
+        : Score <= oldAlpha       ? UPPER_BOUND
                                   : EXACT_BOUND;
         tt_save(e,
-            b->stack->boardKey,
-            score_to_tt(Score, ss->plies),
-            eval,
-            0,
-            bound,
-            best);
+        b->stack->boardKey,
+        score_to_tt(Score, ss->plies),
+        eval,
+        0,
+        bound,
+        best);
         return Score;
 }
