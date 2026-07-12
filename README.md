@@ -18,12 +18,10 @@ Grizzly implements the UCI protocol and is compatible with standard chess GUIs (
 
 Example:
 
-```text
 uci
 isready
 position startpos
 go depth 12
-```
 
 ## Features
 
