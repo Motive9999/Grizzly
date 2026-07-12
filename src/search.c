@@ -464,9 +464,15 @@ score_t search(bool isPV,
         // Move loop
 move_loop:
         movepicker_setup(&mp, false, b, w, ttMove, ss);
-        move_t  best = NO_MOVE, m, pv[256];
-        move_t  quiets[64], caps[64];
-        int     moves = 0, qc = 0, cc = 0;
+        move_t  best = NO_MOVE;
+        move_t  m;
+        move_t  pv[256];
+        int     moves = 0;
+        int     qc    = 0;
+        int     cc    = 0;
+
+        move_t  quiets[64];
+        move_t  caps[64];
         bool    skipQ = false;
         score_t Score = -INF_SCORE;
         while ((m = movepicker_next(&mp, skipQ, 0)) != NO_MOVE) {
