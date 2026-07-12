@@ -16,13 +16,6 @@ This software is licensed under GPL-3.0 or later.
 
 Grizzly implements the UCI protocol and is compatible with standard chess GUIs (such as Arena, CuteChess, or Nibbler) as well as direct command-line use.
 
-Example:
-
-uci<br>
-isready<br>
-position startpos<br>
-go depth 12
-
 ## Features
 
 - NNUE evaluation with in-house networks and tooling
