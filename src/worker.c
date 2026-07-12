@@ -9,12 +9,13 @@
 
 extern uint64_t perft(Board *board, unsigned depth);
 
-WorkerPool      SearchWorkerPool;
-static int      Reductions[2][256];
-int             Pruning[2][16];
+WorkerPool SearchWorkerPool;
+static int Reductions[2][256];
+int        Pruning[2][16];
 
-const double    BestmoveTypeScale[BM_TYPE_NB] = {0.20, 0.45, 0.50, 0.85, 0.95, 1.00, 1.20, 1.40};
-const double    BestmoveStabilityScale[5] = {2.50, 1.20, 0.90, 0.80, 0.75};
+const double BestmoveTypeScale[BM_TYPE_NB] = {
+    0.20, 0.45, 0.50, 0.85, 0.95, 1.00, 1.20, 1.40};
+const double BestmoveStabilityScale[5] = {2.50, 1.20, 0.90, 0.80, 0.75};
 
 static void die(const char *m) {
         perror(m);
@@ -417,11 +418,11 @@ void worker_search(Worker *w) {
                         sort_root_moves(w->rootMoves, w->rootMoves + multiPv);
 
                         search_print_root_info(b,
-                        w,
-                        w->pvLine + 1,
-                        iter,
-                        chess_clock() - SearchTimeman.start,
-                        EXACT_BOUND);
+                            w,
+                            w->pvLine + 1,
+                            iter,
+                            chess_clock() - SearchTimeman.start,
+                            EXACT_BOUND);
                 }
                 for (RootMove *i = w->rootMoves; i < w->rootMoves + w->rootCount; ++i) {
                         i->prevScore = i->score;

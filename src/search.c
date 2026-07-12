@@ -8,14 +8,14 @@
 #define FP_BASE_MARGIN       186
 #define FP_DEPTH_MARGIN      67
 
-#define CHP_BASE             421
-#define CHP_DEPTH_SCALE      2839
+#define CHP_BASE        421
+#define CHP_DEPTH_SCALE 2839
 
 #define SEE_QUIET_PER_DEPTH  -49
 #define SEE_NOISY_PER_DEPTH2 -22
 
-#define LMR_HIST_DIV         6307
-#define QFP_BASE             110
+#define LMR_HIST_DIV 6307
+#define QFP_BASE     110
 
 #define FALL              __attribute__((fallthrough))
 #define STOP              wpool_is_stopped(&SearchWorkerPool)
