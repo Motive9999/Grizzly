@@ -20,7 +20,9 @@
 #define STOP              wpool_is_stopped(&SearchWorkerPool)
 #define NODE              atomic_fetch_add_explicit(&w->nodes, 1, memory_order_relaxed)
 #define ZWS(d, beta, cut) (-search(false, b, (d), -(beta), 1 - (beta), ss + 1, (cut)))
-#define TTS(s)            score_to_tt((s), ss->plies)
+#define QS(pv, alpha, beta, stack)                                                       \
+        (-search((pv), b, -MAX_PLIES, -(beta), -(alpha), (stack), false))
+#define TTS(s) score_to_tt((s), ss->plies)
 
 extern TranspositionTable SearchTT;
 extern int                Pruning[2][16];
@@ -292,35 +294,35 @@ score_t             alpha,
 score_t             beta,
 Searchstack        *ss,
 bool                cut) {
-        // Node setup
+        // Node setup and terminal positions
+        bool    qs   = depth <= 0;
+        bool    qrec = depth == -MAX_PLIES;
         bool    root = ss->plies == 0;
         Worker *w    = get_worker(b);
-
-        // Search limits and terminal positions
-        if (root && w->rootDepth > SEARCH_DEPTH) {
-                wpool_stop(&SearchWorkerPool);
-                return draw_score(w);
+        if (!qrec) {
+                if (root && w->rootDepth > SEARCH_DEPTH) {
+                        wpool_stop(&SearchWorkerPool);
+                        return draw_score(w);
+                }
+                if (!root && b->stack->rule50 >= 3 && alpha < 0 &&
+                game_has_cycle(b, ss->plies)) {
+                        alpha = draw_score(w);
+                        if (alpha >= beta)
+                                return alpha;
+                }
         }
-        if (!root && b->stack->rule50 >= 3 && alpha < 0 && game_has_cycle(b, ss->plies)) {
-                alpha = draw_score(w);
-                if (alpha >= beta)
-                        return alpha;
-        }
-        if (depth <= 0)
-                return qsearch(isPV, b, alpha, beta, ss);
+        const score_t oldAlpha = alpha;
         if (!w->idx)
                 check_time();
         if (STOP)
                 return draw_score(w);
         if (isPV && w->seldepth < ss->plies + 1)
                 w->seldepth = ss->plies + 1;
-        if (!root && game_is_drawn(b, ss->plies))
+        if ((qs || !root) && game_is_drawn(b, ss->plies))
                 return draw_score(w);
         if (ss->plies >= MAX_PLIES)
                 return !b->stack->checkers ? evaluate(b) : draw_score(w);
-
-        // Mate-distance pruning
-        if (!root) {
+        if (qs || !root) {
                 alpha = imax(alpha, mated_in(ss->plies));
                 beta  = imin(beta, mate_in(ss->plies + 1));
                 if (alpha >= beta)
@@ -329,50 +331,129 @@ bool                cut) {
 
         // Position and transposition-table state
         bool      inCheck = !!b->stack->checkers;
-        hashkey_t key     = b->stack->boardKey ^ ((hashkey_t)ss->excludedMove << 16);
+        hashkey_t key     = b->stack->boardKey;
+        if (!qs)
+                key ^= (hashkey_t)ss->excludedMove << 16;
         bool      found   = false;
         int       ttDepth = 0, ttBound = NO_BOUND;
-        score_t   ttScore = NO_SCORE, eval;
+        score_t   ttScore = NO_SCORE;
         move_t    ttMove  = NO_MOVE;
         TT_Entry *e       = tt_probe(key, &found);
-
-        // Transposition-table cutoff
         if (found) {
-                ttScore = score_from_tt(e->score, ss->plies);
-                ttBound = e->genbound & 3;
-                ttDepth = e->depth;
-                ttMove  = e->bestmove;
-
-                if (ttDepth >= depth && !isPV && b->stack->rule50 < 96 &&
-                (abs(ttScore) < VICTORY || ttBound == EXACT_BOUND) &&
+                ttScore     = score_from_tt(e->score, ss->plies);
+                ttBound     = e->genbound & 3;
+                ttDepth     = e->depth;
+                ttMove      = e->bestmove;
+                bool cutoff = !isPV &&
                 (((ttBound & LOWER_BOUND) && ttScore >= beta) ||
-                ((ttBound & UPPER_BOUND) && ttScore <= alpha))) {
-                        if ((ttBound & LOWER_BOUND) && ttMove &&
+                ((ttBound & UPPER_BOUND) && ttScore <= alpha));
+                if (cutoff &&
+                (qs ||
+                (ttDepth >= depth && b->stack->rule50 < 96 &&
+                (abs(ttScore) < VICTORY || ttBound == EXACT_BOUND)))) {
+                        if (!qs && (ttBound & LOWER_BOUND) && ttMove &&
                         !capture_or_promotion(b, ttMove))
                                 update_quiet_stats(b, depth, ttMove, NULL, 0, ss);
                         return ttScore;
                 }
         }
 
-        // Per-node state
+        // Static evaluation
+        score_t eval, Score = -INF_SCORE;
+        if (inCheck) {
+                eval = NO_SCORE;
+        } else {
+                eval  = found ? e->eval : evaluate(b);
+                Score = eval;
+                if (ttBound & (ttScore > eval ? LOWER_BOUND : UPPER_BOUND))
+                        Score = ttScore;
+        }
+
+        // Quiescence search
+        if (qs) {
+                if (!inCheck) {
+                        alpha = imax(alpha, Score);
+                        if (alpha >= beta) {
+                                if (!found)
+                                        tt_save(e,
+                                        key,
+                                        TTS(Score),
+                                        eval,
+                                        0,
+                                        LOWER_BOUND,
+                                        NO_MOVE);
+                                return alpha;
+                        }
+                }
+                Movepicker mp;
+                movepicker_setup(&mp, true, b, w, ttMove, ss);
+                move_t  best    = NO_MOVE, m, pv[256];
+                int     moves   = 0;
+                bool    canFP   = !inCheck && popcount(occupancy_bb(b)) >= 5;
+                score_t futBase = Score + QFP_BASE;
+                if (isPV)
+                        (ss + 1)->pv = pv;
+                while ((m = movepicker_next(&mp, false, 0)) != NO_MOVE) {
+                        if (Score > -MATE_FOUND && mp.stage == PICK_BAD_INSTABLE)
+                                break;
+                        if (!move_is_legal(b, m))
+                                continue;
+                        ++moves;
+                        bool     chk = move_gives_check(b, m);
+                        square_t to  = to_sq(m);
+                        if (Score > -MATE_FOUND && canFP && !chk &&
+                        move_type(m) == NORMAL_MOVE) {
+                                score_t delta = futBase +
+                                PieceScores[ENDGAME][piece_on(b, to)];
+                                if (delta < alpha)
+                                        continue;
+                                if (futBase < alpha && !see_greater_than(b, m, 1))
+                                        continue;
+                        }
+                        ss->currentMove  = m;
+                        ss->pieceHistory = &w->ctHistory[piece_on(b, from_sq(m))][to];
+                        Boardstack st;
+                        if (isPV)
+                                pv[0] = NO_MOVE;
+                        do_move_gc(b, m, &st, chk);
+                        NODE;
+                        score_t s = QS(isPV, alpha, beta, ss + 1);
+                        undo_move(b, m);
+                        if (STOP)
+                                return 0;
+                        if (s > Score) {
+                                Score = s;
+                                if (s > alpha) {
+                                        alpha = s;
+                                        best  = m;
+                                        if (isPV)
+                                                update_pv(ss->pv, best, (ss + 1)->pv);
+                                        if (alpha >= beta)
+                                                break;
+                                }
+                        }
+                }
+                if (moves == 0 && inCheck)
+                        Score = mated_in(ss->plies);
+                int bound = Score >= beta ? LOWER_BOUND
+                : Score <= oldAlpha       ? UPPER_BOUND
+                                          : EXACT_BOUND;
+                tt_save(e, key, TTS(Score), eval, 0, bound, best);
+                return Score;
+        }
+
+        // Main-search state
         Movepicker mp;
         (ss + 2)->killers[0] = (ss + 2)->killers[1] = NO_MOVE;
         ss->doubleExtensions                        = (ss - 1)->doubleExtensions;
         bool improving                              = false;
-
-        // Static evaluation
-        if (inCheck) {
-                eval = ss->staticEval = NO_SCORE;
+        ss->staticEval                              = eval;
+        if (inCheck)
                 goto move_loop;
-        }
-        if (found) {
-                eval = ss->staticEval = e->eval;
-                if (ttBound & (ttScore > eval ? LOWER_BOUND : UPPER_BOUND))
-                        eval = ttScore;
-        } else {
-                eval = ss->staticEval = evaluate(b);
+        eval  = Score;
+        Score = -INF_SCORE;
+        if (!found)
                 tt_save(e, key, NO_SCORE, eval, 0, NO_BOUND, NO_MOVE);
-        }
         if (root && w->pvLine)
                 ttMove = w->rootMoves[w->pvLine].move;
         if (ss->plies >= 2)
@@ -432,7 +513,7 @@ bool                cut) {
                         bool       chk = move_gives_check(b, m);
                         do_move_gc(b, m, &st, chk);
                         NODE;
-                        score_t s = -qsearch(false, b, -pcBeta, 1 - pcBeta, ss + 1);
+                        score_t s = QS(false, pcBeta - 1, pcBeta, ss + 1);
                         if (s >= pcBeta)
                                 s = ZWS(depth - 4, pcBeta, !cut);
                         undo_move(b, m);
@@ -460,14 +541,14 @@ move_loop:
         move_t best = NO_MOVE;
         move_t m;
         move_t pv[256];
+
         int    moves = 0;
         int    qc    = 0;
         int    cc    = 0;
 
-        move_t  quiets[64];
-        move_t  caps[64];
-        bool    skipQ = false;
-        score_t Score = -INF_SCORE;
+        move_t quiets[64];
+        move_t caps[64];
+        bool   skipQ = false;
         while ((m = movepicker_next(&mp, skipQ, 0)) != NO_MOVE) {
                 if (root) {
                         if (!find_root_move(w->rootMoves + w->pvLine,
@@ -631,123 +712,5 @@ move_loop:
                 bound,
                 best);
         }
-        return Score;
-}
-
-score_t qsearch(bool isPV, Board *b, score_t alpha, score_t beta, Searchstack *ss) {
-        Worker       *w        = get_worker(b);
-        const score_t oldAlpha = alpha;
-        if (!w->idx)
-                check_time();
-        if (isPV && w->seldepth < ss->plies + 1)
-                w->seldepth = ss->plies + 1;
-        if (STOP || game_is_drawn(b, ss->plies))
-                return draw_score(w);
-        if (ss->plies >= MAX_PLIES)
-                return !b->stack->checkers ? evaluate(b) : draw_score(w);
-        alpha = imax(alpha, mated_in(ss->plies));
-        beta  = imin(beta, mate_in(ss->plies + 1));
-        if (alpha >= beta)
-                return alpha;
-        bool      found;
-        TT_Entry *e       = tt_probe(b->stack->boardKey, &found);
-        score_t   ttScore = NO_SCORE;
-        int       ttBound = NO_BOUND;
-        move_t    ttMove  = NO_MOVE;
-        if (found) {
-                ttBound = e->genbound & 3;
-                ttScore = score_from_tt(e->score, ss->plies);
-                ttMove  = e->bestmove;
-                if (!isPV &&
-                (((ttBound & LOWER_BOUND) && ttScore >= beta) ||
-                ((ttBound & UPPER_BOUND) && ttScore <= alpha)))
-                        return ttScore;
-        }
-        bool    inCheck = !!b->stack->checkers;
-        score_t eval, Score;
-        if (inCheck) {
-                eval  = NO_SCORE;
-                Score = -INF_SCORE;
-        } else {
-                if (found) {
-                        eval = Score = e->eval;
-                        if (ttBound & (ttScore > eval ? LOWER_BOUND : UPPER_BOUND))
-                                Score = ttScore;
-                } else {
-                        eval = Score = evaluate(b);
-                }
-                alpha = imax(alpha, Score);
-                if (alpha >= beta) {
-                        if (!found)
-                                tt_save(e,
-                                b->stack->boardKey,
-                                score_to_tt(Score, ss->plies),
-                                eval,
-                                0,
-                                LOWER_BOUND,
-                                NO_MOVE);
-                        return alpha;
-                }
-        }
-
-        Movepicker mp;
-        movepicker_setup(&mp, true, b, w, ttMove, ss);
-        move_t  best    = NO_MOVE, m, pv[256];
-        int     moves   = 0;
-        bool    canFP   = !inCheck && popcount(occupancy_bb(b)) >= 5;
-        score_t futBase = Score + QFP_BASE;
-        if (isPV)
-                (ss + 1)->pv = pv;
-        while ((m = movepicker_next(&mp, false, 0)) != NO_MOVE) {
-                if (Score > -MATE_FOUND && mp.stage == PICK_BAD_INSTABLE)
-                        break;
-                if (!move_is_legal(b, m))
-                        continue;
-                ++moves;
-                bool     chk = move_gives_check(b, m);
-                square_t to  = to_sq(m);
-                if (Score > -MATE_FOUND && canFP && !chk && move_type(m) == NORMAL_MOVE) {
-                        score_t delta = futBase + PieceScores[ENDGAME][piece_on(b, to)];
-                        if (delta < alpha)
-                                continue;
-                        if (futBase < alpha && !see_greater_than(b, m, 1))
-                                continue;
-                }
-                ss->currentMove  = m;
-                ss->pieceHistory = &w->ctHistory[piece_on(b, from_sq(m))][to];
-                Boardstack st;
-                if (isPV)
-                        pv[0] = NO_MOVE;
-                do_move_gc(b, m, &st, chk);
-                NODE;
-                score_t s = -qsearch(isPV, b, -beta, -alpha, ss + 1);
-                undo_move(b, m);
-                if (STOP)
-                        return 0;
-                if (s > Score) {
-                        Score = s;
-                        if (s > alpha) {
-                                alpha = s;
-                                best  = m;
-                                if (isPV)
-                                        update_pv(ss->pv, best, (ss + 1)->pv);
-                                if (alpha >= beta)
-                                        break;
-                        }
-                }
-        }
-
-        if (moves == 0 && inCheck)
-                Score = mated_in(ss->plies);
-        int bound = Score >= beta ? LOWER_BOUND
-        : Score <= oldAlpha       ? UPPER_BOUND
-                                  : EXACT_BOUND;
-        tt_save(e,
-        b->stack->boardKey,
-        score_to_tt(Score, ss->plies),
-        eval,
-        0,
-        bound,
-        best);
         return Score;
 }
