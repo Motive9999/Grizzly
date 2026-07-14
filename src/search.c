@@ -31,6 +31,8 @@ static inline void upd_cont(Searchstack *ss, int d, piece_t pc, square_t to, boo
                 add_pc_history(*(ss - 1)->pieceHistory, pc, to, bonus);
         if ((ss - 2)->pieceHistory)
                 add_pc_history(*(ss - 2)->pieceHistory, pc, to, bonus);
+        if ((ss - 4)->pieceHistory)
+                add_pc_history(*(ss - 4)->pieceHistory, pc, to, bonus);
 }
 
 static inline void upd_cap(capture_history_t *ch, const Board *b, move_t m, int bonus) {
@@ -48,6 +50,8 @@ static inline int cont_score(const Board *b, const Searchstack *ss, move_t m) {
                 h += get_pc_history_score(*(ss - 1)->pieceHistory, pc, to);
         if ((ss - 2)->pieceHistory)
                 h += get_pc_history_score(*(ss - 2)->pieceHistory, pc, to);
+        if ((ss - 4)->pieceHistory)
+                h += get_pc_history_score(*(ss - 4)->pieceHistory, pc, to);
         return h;
 }
 
@@ -550,7 +554,7 @@ move_loop:
                         eval + FP_BASE_MARGIN + FP_DEPTH_MARGIN * depth <= alpha)
                                 skipQ = true;
                         if (depth <= 4 &&
-                        cont_score(b, ss, m) < CHP_BASE - CHP_DEPTH_SCALE * (depth - 1))
+                        hist_score(b, w, ss, m) < CHP_BASE - CHP_DEPTH_SCALE * (depth - 1))
                                 continue;
                         if (depth <= 12 &&
                         !see_greater_than(b,
@@ -663,12 +667,7 @@ move_loop:
                                                 quiets,
                                                 qc,
                                                 ss);
-                                        if (moves != 1)
-                                                update_capture_stats(b,
-                                                depth,
-                                                best,
-                                                caps,
-                                                cc);
+                                        update_capture_stats(b, depth, best, caps, cc);
                                         break;
                                 }
                         }
