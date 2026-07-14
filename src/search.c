@@ -534,8 +534,7 @@ move_loop:
 
         move_t quiets[64];
         move_t caps[64];
-        bool   skipQ = false;
-        while ((m = movepicker_next(&mp, skipQ, 0)) != NO_MOVE) {
+        while ((m = movepicker_next(&mp, false, 0)) != NO_MOVE) {
                 if (root) {
                         if (!find_root_move(w->rootMoves + w->pvLine,
                             w->rootMoves + w->rootCount,
@@ -547,15 +546,20 @@ move_loop:
                 }
                 ++moves;
                 bool quiet = !capture_or_promotion(b, m);
+                bool chk   = move_gives_check(b, m);
                 if (!root && Score > -MATE_FOUND) {
-                        if (depth <= 8 && moves > Pruning[improving][depth])
-                                skipQ = true;
-                        if (depth <= 7 && !inCheck && quiet &&
-                        eval + FP_BASE_MARGIN + FP_DEPTH_MARGIN * depth <= alpha)
-                                skipQ = true;
-                        if (depth <= 4 &&
-                        hist_score(b, w, ss, m) < CHP_BASE - CHP_DEPTH_SCALE * (depth - 1))
-                                continue;
+                        if (quiet && !chk) {
+                                if (depth <= 8 &&
+                                moves > Pruning[improving][depth])
+                                        continue;
+                                if (depth <= 7 && !inCheck &&
+                                eval + FP_BASE_MARGIN + FP_DEPTH_MARGIN * depth <= alpha)
+                                        continue;
+                                if (depth <= 4 &&
+                                hist_score(b, w, ss, m) <
+                                CHP_BASE - CHP_DEPTH_SCALE * (depth - 1))
+                                        continue;
+                        }
                         if (depth <= 12 &&
                         !see_greater_than(b,
                         m,
@@ -568,7 +572,6 @@ move_loop:
                 int        ext      = 0;
                 int        newDepth = depth - 1;
                 int        R        = 0;
-                bool       chk      = move_gives_check(b, m);
                 piece_t    pc       = piece_on(b, from_sq(m));
                 int        hist     = quiet ? hist_score(b, w, ss, m) : 0;
                 score_t    s        = -NO_SCORE;
