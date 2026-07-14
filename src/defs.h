@@ -662,7 +662,6 @@ typedef struct {
 } Searchstack;
 
 void  init_search_tables(void);
-Score qsearch(bool pvNode, Board *b, Score alpha, Score beta, Searchstack *ss);
 Score search(bool pvNode,
 Board            *b,
 int               depth,
@@ -670,6 +669,18 @@ Score             alpha,
 Score             beta,
 Searchstack      *ss,
 bool              cutNode);
+int   lmr_base_value(int depth, int moves, bool improving, bool quiet);
+void  update_pv(Move *pv, Move best, Move *sub);
+
+INLINED Score
+search_zw(Board *b, int depth, Score beta, Searchstack *ss, bool cut) {
+        return -search(false, b, depth, -beta, 1 - beta, ss + 1, cut);
+}
+
+INLINED Score
+search_qs(bool pv, Board *b, Score alpha, Score beta, Searchstack *ss) {
+        return -search(pv, b, -MAX_PLIES, -beta, -alpha, ss + 1, false);
+}
 
 typedef struct {
         HashKey  key;
@@ -690,6 +701,7 @@ typedef struct {
 } TranspositionTable;
 
 extern TranspositionTable SearchTT;
+extern int                Pruning[2][16];
 
 INLINED TT_Entry *tt_entry_at(HashKey k) {
         return SearchTT.table[mul_hi64(k, SearchTT.clusterCount)].clEntry;
@@ -781,6 +793,9 @@ INLINED Worker *get_worker(const Board *b) {
 INLINED Score draw_score(const Worker *w) {
         return (atomic_load_explicit(&w->nodes, memory_order_relaxed) & 2) - 1;
 }
+INLINED void count_node(Worker *w) {
+        atomic_fetch_add_explicit(&w->nodes, 1, memory_order_relaxed);
+}
 
 void  worker_init(Worker *w, size_t idx);
 void  worker_destroy(Worker *w);
@@ -836,7 +851,6 @@ typedef enum {
         PICK_GOOD_INSTABLE,
         PICK_KILLER1,
         PICK_KILLER2,
-        PICK_COUNTER,
         GEN_QUIET,
         PICK_QUIET,
         PICK_BAD_INSTABLE,
@@ -850,7 +864,7 @@ typedef struct {
         ExtendedMove    *cur, *badCaptures;
         bool             inQsearch;
         mp_stage_t       stage;
-        Move             ttMove, killer1, killer2, counter;
+        Move             ttMove, killer1, killer2;
         const Board     *board;
         const Worker    *worker;
         piece_history_t *pieceHistory[2];

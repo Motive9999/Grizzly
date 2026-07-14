@@ -6,19 +6,14 @@
 
 const char PieceIndexes[PIECE_NB] = " PNBRQK  pnbrqk";
 
-Bitboard LineBB[SQUARE_NB][SQUARE_NB];
-Bitboard PseudoMoves[PIECETYPE_NB][SQUARE_NB];
-Bitboard PawnMoves[COLOR_NB][SQUARE_NB];
+Bitboard LineBB[SQUARE_NB][SQUARE_NB], PseudoMoves[PIECETYPE_NB][SQUARE_NB];
+Bitboard PawnMoves[COLOR_NB][SQUARE_NB], HiddenRookTable[0x19000];
+Bitboard HiddenBishopTable[0x1480];
 Magic    BishopMagics[SQUARE_NB], RookMagics[SQUARE_NB];
 int      SquareDistance[SQUARE_NB][SQUARE_NB];
-
-Bitboard HiddenRookTable[0x19000], HiddenBishopTable[0x1480];
-HashKey  CyclicKeys[8192];
+HashKey  CyclicKeys[8192], ZobristPsq[PIECE_NB][SQUARE_NB];
+HashKey  ZobristEnPassant[FILE_NB], ZobristCastling[CASTLING_NB], ZobristSideToMove;
 Move     CyclicMoves[8192];
-HashKey  ZobristPsq[PIECE_NB][SQUARE_NB];
-HashKey  ZobristEnPassant[FILE_NB];
-HashKey  ZobristCastling[CASTLING_NB];
-HashKey  ZobristSideToMove;
 
 Bitboard sliding_attack(const Direction *dirs, Square sq, Bitboard occ) {
         Bitboard attack = 0;
@@ -96,8 +91,7 @@ void bitboard_init(void) {
                 PawnMoves[WHITE][sq] = shift_up_left(b) | shift_up_right(b);
                 PawnMoves[BLACK][sq] = shift_down_left(b) | shift_down_right(b);
                 for (int i = 0; i < 8; ++i) {
-                        const Square kto = sq + kingDirs[i];
-                        const Square nto = sq + knightDirs[i];
+                        const Square kto = sq + kingDirs[i], nto = sq + knightDirs[i];
                         if (is_valid_sq(kto) && SquareDistance[sq][kto] <= 2)
                                 PseudoMoves[KING][sq] |= square_bb(kto);
                         if (is_valid_sq(nto) && SquareDistance[sq][nto] <= 2)
@@ -224,19 +218,6 @@ static int board_parse_fen_pieces(Board *b, const char *fen) {
         return (int)next;
 }
 
-static int board_parse_stm(Board *b, const char *fen) {
-        const size_t next = strcspn(fen, Delimiters);
-        if (next > 1)
-                FEN_ERR("invalid side to move");
-        if (*fen == 'b')
-                b->sideToMove = BLACK;
-        else if (*fen == 'w' || *fen == '\0')
-                b->sideToMove = WHITE;
-        else
-                FEN_ERR("invalid side to move character");
-        return (int)next;
-}
-
 static int board_set_castling(Board *b, Color c, Square rookSq) {
         const Square kingSq   = get_king_square(b, c);
         const int    castling = (c == WHITE ? WHITE_CASTLING : BLACK_CASTLING) &
@@ -329,8 +310,13 @@ int board_from_fen(Board *b, const char *fen, bool is960, Boardstack *bs) {
         if ((r = board_parse_fen_pieces(b, fen)) < 0)
                 return r;
         FEN_NEXT(fen, r);
-        if ((r = board_parse_stm(b, fen)) < 0)
-                return r;
+        r = strcspn(fen, Delimiters);
+        if (r > 1)
+                FEN_ERR("invalid side to move");
+        if (*fen == 'b')
+                b->sideToMove = BLACK;
+        else if (*fen != 'w' && *fen != '\0')
+                FEN_ERR("invalid side to move character");
         FEN_NEXT(fen, r);
         if (attackers_to(b, get_king_square(b, not_color(b->sideToMove))) &
         color_bb(b, b->sideToMove))
@@ -598,11 +584,24 @@ void undo_move(Board *b, Move m) {
         b->ply -= 1;
 }
 
-INLINED void castling_squares(Color us, Square kf, Square *kt, Square *rf, Square *rt) {
+INLINED void move_castling(Board *restrict b,
+Color  us,
+Square kf,
+Square *restrict kt,
+Square *restrict rf,
+Square *restrict rt,
+bool undo) {
         const bool ks = *kt > kf;
         *rf           = *kt;
         *rt           = relative_sq(ks ? SQ_F1 : SQ_D1, us);
         *kt           = relative_sq(ks ? SQ_G1 : SQ_C1, us);
+        const Square fromK = undo ? *kt : kf, fromR = undo ? *rt : *rf;
+        const Square toK = undo ? kf : *kt, toR = undo ? *rf : *rt;
+        remove_piece(b, fromK);
+        remove_piece(b, fromR);
+        b->table[fromK] = b->table[fromR] = NO_PIECE;
+        put_piece(b, create_piece(us, KING), toK);
+        put_piece(b, create_piece(us, ROOK), toR);
 }
 
 void do_castling(Board *restrict b,
@@ -611,12 +610,7 @@ Square kf,
 Square *restrict kt,
 Square *restrict rf,
 Square *restrict rt) {
-        castling_squares(us, kf, kt, rf, rt);
-        remove_piece(b, kf);
-        remove_piece(b, *rf);
-        b->table[kf] = b->table[*rf] = NO_PIECE;
-        put_piece(b, create_piece(us, KING), *kt);
-        put_piece(b, create_piece(us, ROOK), *rt);
+        move_castling(b, us, kf, kt, rf, rt, false);
 }
 
 void undo_castling(Board *restrict b,
@@ -625,12 +619,7 @@ Square kf,
 Square *restrict kt,
 Square *restrict rf,
 Square *restrict rt) {
-        castling_squares(us, kf, kt, rf, rt);
-        remove_piece(b, *kt);
-        remove_piece(b, *rt);
-        b->table[*kt] = b->table[*rt] = NO_PIECE;
-        put_piece(b, create_piece(us, KING), kf);
-        put_piece(b, create_piece(us, ROOK), *rf);
+        move_castling(b, us, kf, kt, rf, rt, true);
 }
 
 void do_null_move(Board *restrict b, Boardstack *restrict s) {
@@ -809,11 +798,8 @@ bool move_pseudo_legal(const Board *b, Move m) {
                 list_pseudo(&list, b);
                 return movelist_has_move(&list, m);
         }
-        if (promotion_type(m) != KNIGHT)
-                return false;
-        if (pc == NO_PIECE || piece_color(pc) != us)
-                return false;
-        if (color_bb(b, us) & square_bb(to))
+        if (promotion_type(m) != KNIGHT || pc == NO_PIECE || piece_color(pc) != us ||
+        (color_bb(b, us) & square_bb(to)))
                 return false;
         if (piece_type(pc) == PAWN) {
                 if ((RANK_8_BB | RANK_1_BB) & square_bb(to))
@@ -854,13 +840,6 @@ bool see_greater_than(const Board *b, Move m, Score threshold) {
         if (next <= 0)
                 return true;
 
-        /* order: PAWN, KNIGHT, BISHOP, ROOK, QUEEN.
-           reveal: 1 = diagonal sliders, 2 = orthogonal sliders, 3 = both. */
-        static const PieceType PT[5]    = {PAWN, KNIGHT, BISHOP, ROOK, QUEEN};
-        static const Score     VALUE[5] = {
-        PAWN_MG_SCORE, KNIGHT_MG_SCORE, BISHOP_MG_SCORE, ROOK_MG_SCORE, QUEEN_MG_SCORE};
-        static const int REVEAL[5] = {1, 0, 1, 2, 3};
-
         Bitboard occ       = occupancy_bb(b) ^ square_bb(from) ^ square_bb(to);
         Bitboard attackers = attackers_list(b, to, occ);
         Color    stm       = piece_color(piece_on(b, from));
@@ -879,21 +858,21 @@ bool see_greater_than(const Board *b, Move m, Score threshold) {
                 }
                 result ^= 1;
 
-                Bitboard bb = 0;
-                int      i  = 0;
-                for (; i < 5; ++i)
-                        if ((bb = mine & piecetype_bb(b, PT[i])))
+                Bitboard  bb = 0;
+                PieceType pt = PAWN;
+                for (; pt < KING; ++pt)
+                        if ((bb = mine & piecetype_bb(b, pt)))
                                 break;
-                if (i == 5)
+                if (pt == KING)
                         return (attackers & ~color_bb(b, stm)) ? result ^ 1 : result;
-                if ((next = VALUE[i] - next) < result)
+                if ((next = PieceScores[MIDGAME][pt] - next) < result)
                         break;
 
                 occ ^= square_bb(bb_first_sq(bb));
-                if (REVEAL[i] & 1)
+                if (pt != KNIGHT && pt != ROOK)
                         attackers |= bishop_moves_bb(to, occ) &
                         piecetypes_bb(b, BISHOP, QUEEN);
-                if (REVEAL[i] & 2)
+                if (pt >= ROOK)
                         attackers |= rook_moves_bb(to, occ) &
                         piecetypes_bb(b, ROOK, QUEEN);
         }

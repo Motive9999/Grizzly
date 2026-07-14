@@ -1,5 +1,4 @@
 #include "defs.h"
-#include <stdlib.h>
 
 #define SEARCH_DEPTH         32
 #define RFP_MARGIN_PER_DEPTH 85
@@ -16,19 +15,7 @@
 #define LMR_HIST_DIV 6307
 #define QFP_BASE     110
 
-#define FALL              __attribute__((fallthrough))
-#define STOP              wpool_is_stopped(&SearchWorkerPool)
-#define NODE              atomic_fetch_add_explicit(&w->nodes, 1, memory_order_relaxed)
-#define ZWS(d, beta, cut) (-search(false, b, (d), -(beta), 1 - (beta), ss + 1, (cut)))
-#define QS(pv, alpha, beta, stack)                                                       \
-        (-search((pv), b, -MAX_PLIES, -(beta), -(alpha), (stack), false))
-#define TTS(s) score_to_tt((s), ss->plies)
-
-extern TranspositionTable SearchTT;
-extern int                Pruning[2][16];
-
-extern int  lmr_base_value(int depth, int moves, bool improving, bool quiet);
-extern void update_pv(move_t *pv, move_t best, move_t *sub);
+#define FALLTHROUGH __attribute__((fallthrough))
 
 static inline piecetype_t cap_type(const Board *b, move_t m) {
         if (move_type(m) == PROMOTION)
@@ -129,9 +116,7 @@ void update_capture_stats(const Board *b,
 int                                    d,
 move_t                                 best,
 const move_t                           caps[64],
-int                                    cc,
-Searchstack                           *ss) {
-        (void)ss;
+int                                    cc) {
         Worker *w     = get_worker(b);
         int     bonus = history_bonus(d);
         if (capture_or_promotion(b, best))
@@ -210,7 +195,7 @@ top:
                         mp->inQsearch);
                         rank_captures(mp, mp->list.moves, mp->list.last);
                         mp->cur = mp->badCaptures = mp->list.moves;
-                        FALL;
+                        FALLTHROUGH;
                 case PICK_GOOD_INSTABLE:
                         while (mp->cur < mp->list.last) {
                                 place_top_move(mp->cur, mp->list.last);
@@ -225,30 +210,27 @@ top:
                                 goto top;
                         }
                         ++mp->stage;
-                        FALL;
+                        FALLTHROUGH;
                 case PICK_KILLER1:
                         ++mp->stage;
                         if (mp->killer1 && mp->killer1 != mp->ttMove &&
                         move_pseudo_legal(mp->board, mp->killer1))
                                 return mp->killer1;
-                        FALL;
+                        FALLTHROUGH;
                 case PICK_KILLER2:
                         ++mp->stage;
                         if (mp->killer2 && mp->killer2 != mp->ttMove &&
                         mp->killer2 != mp->killer1 &&
                         move_pseudo_legal(mp->board, mp->killer2))
                                 return mp->killer2;
-                        FALL;
-                case PICK_COUNTER:
-                        mp->stage = GEN_QUIET;
-                        FALL;
+                        FALLTHROUGH;
                 case GEN_QUIET:
                         ++mp->stage;
                         if (!skipQuiets) {
                                 mp->list.last = generate_quiet(mp->cur, mp->board);
                                 rank_quiets(mp, mp->cur, mp->list.last);
                         }
-                        FALL;
+                        FALLTHROUGH;
                 case PICK_QUIET:
                         if (!skipQuiets) {
                                 while (mp->cur < mp->list.last) {
@@ -261,7 +243,7 @@ top:
                         }
                         ++mp->stage;
                         mp->cur = mp->list.moves;
-                        FALL;
+                        FALLTHROUGH;
                 case PICK_BAD_INSTABLE:
                         while (mp->cur < mp->badCaptures) {
                                 if (mp->cur->move != mp->ttMove)
@@ -274,7 +256,7 @@ top:
                         mp->list.last = generate_evasions(mp->list.moves, mp->board);
                         rank_evasions(mp, mp->list.moves, mp->list.last);
                         mp->cur = mp->list.moves;
-                        FALL;
+                        FALLTHROUGH;
                 case CHECK_PICK_ALL:
                         while (mp->cur < mp->list.last) {
                                 place_top_move(mp->cur, mp->list.last);
@@ -314,7 +296,7 @@ bool                cut) {
         const score_t oldAlpha = alpha;
         if (!w->idx)
                 check_time();
-        if (STOP)
+        if (wpool_is_stopped(&SearchWorkerPool))
                 return draw_score(w);
         if (isPV && w->seldepth < ss->plies + 1)
                 w->seldepth = ss->plies + 1;
@@ -377,7 +359,7 @@ bool                cut) {
                                 if (!found)
                                         tt_save(e,
                                         key,
-                                        TTS(Score),
+                                        score_to_tt(Score, ss->plies),
                                         eval,
                                         0,
                                         LOWER_BOUND,
@@ -416,10 +398,10 @@ bool                cut) {
                         if (isPV)
                                 pv[0] = NO_MOVE;
                         do_move_gc(b, m, &st, chk);
-                        NODE;
-                        score_t s = QS(isPV, alpha, beta, ss + 1);
+                        count_node(w);
+                        score_t s = search_qs(isPV, b, alpha, beta, ss);
                         undo_move(b, m);
-                        if (STOP)
+                        if (wpool_is_stopped(&SearchWorkerPool))
                                 return 0;
                         if (s > Score) {
                                 Score = s;
@@ -438,7 +420,7 @@ bool                cut) {
                 int bound = Score >= beta ? LOWER_BOUND
                 : Score <= oldAlpha       ? UPPER_BOUND
                                           : EXACT_BOUND;
-                tt_save(e, key, TTS(Score), eval, 0, bound, best);
+                tt_save(e, key, score_to_tt(Score, ss->plies), eval, 0, bound, best);
                 return Score;
         }
 
@@ -473,8 +455,8 @@ bool                cut) {
                 ss->currentMove = NULL_MOVE;
                 ss->pieceHistory = NULL;
                 do_null_move(b, &st);
-                NODE;
-                score_t s = ZWS(depth - R, beta, !cut);
+                count_node(w);
+                score_t s = search_zw(b, depth - R, beta, ss, !cut);
                 undo_null_move(b);
                 if (s >= beta) {
                         if (s > MATE_FOUND)
@@ -512,17 +494,17 @@ bool                cut) {
                         Boardstack st;
                         bool       chk = move_gives_check(b, m);
                         do_move_gc(b, m, &st, chk);
-                        NODE;
-                        score_t s = QS(false, pcBeta - 1, pcBeta, ss + 1);
+                        count_node(w);
+                        score_t s = search_qs(false, b, pcBeta - 1, pcBeta, ss);
                         if (s >= pcBeta)
-                                s = ZWS(depth - 4, pcBeta, !cut);
+                                s = search_zw(b, depth - 4, pcBeta, ss, !cut);
                         undo_move(b, m);
                         if (s < pcBeta)
                                 continue;
 
                         tt_save(e,
                         key,
-                        TTS(s),
+                        score_to_tt(s, ss->plies),
                         ss->staticEval,
                         depth - 3,
                         LOWER_BOUND,
@@ -621,7 +603,7 @@ move_loop:
                 ss->currentMove  = m;
                 ss->pieceHistory = &w->ctHistory[pc][to_sq(m)];
                 do_move_gc(b, m, &st, chk);
-                NODE;
+                count_node(w);
                 bool lmr = depth >= 3 && moves > 1 + 3 * isPV;
                 if (lmr) {
                         R = lmr_base_value(depth, moves, improving, quiet);
@@ -651,7 +633,7 @@ move_loop:
                         s = -search(true, b, newDepth, -beta, -alpha, ss + 1, false);
                 }
                 undo_move(b, m);
-                if (STOP)
+                if (wpool_is_stopped(&SearchWorkerPool))
                         return 0;
                 if (root) {
                         RootMove *rm = find_root_move(w->rootMoves + w->pvLine,
@@ -686,8 +668,7 @@ move_loop:
                                                 depth,
                                                 best,
                                                 caps,
-                                                cc,
-                                                ss);
+                                                cc);
                                         break;
                                 }
                         }
