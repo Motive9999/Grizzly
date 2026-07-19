@@ -1,3 +1,26 @@
+/*
+
+* Grizzly — a UCI chess engine with NNUE evaluation
+*
+* Copyright (C) 2026 Motive9999
+*
+* Derived from Stash, a UCI chess engine developed by Morgan Houppin.
+* Copyright (C) 2019–2025 Morgan Houppin
+*
+* This program is free software: you may redistribute it and/or modify
+* it under the terms of the GNU General Public License, version 3,
+* as published by the Free Software Foundation.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+* GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License
+* along with this program. If not, see https://www.gnu.org/licenses/.
+  */
+
+
 #include "defs.h"
 #include "nn.h"
 #include <stdint.h>
@@ -16,38 +39,12 @@ ScorePair PsqScore[PIECE_NB][SQUARE_NB];
 #define V_Q_MG 950
 #define V_Q_EG 1000
 
-const Score PieceScores[PHASE_NB][PIECE_NB] = {{0,
-                                               V_P_MG,
-                                               V_N_MG,
-                                               V_B_MG,
-                                               V_R_MG,
-                                               V_Q_MG,
-                                               0,
-                                               0,
-                                               0,
-                                               V_P_MG,
-                                               V_N_MG,
-                                               V_B_MG,
-                                               V_R_MG,
-                                               V_Q_MG,
-                                               0,
-                                               0},
-{0,
-V_P_EG,
-V_N_EG,
-V_B_EG,
-V_R_EG,
-V_Q_EG,
-0,
-0,
-0,
-V_P_EG,
-V_N_EG,
-V_B_EG,
-V_R_EG,
-V_Q_EG,
-0,
-0}};
+const Score PieceScores[PHASE_NB][PIECE_NB] = {
+{0, V_P_MG, V_N_MG, V_B_MG, V_R_MG, V_Q_MG, 0, 0,
+0, V_P_MG, V_N_MG, V_B_MG, V_R_MG, V_Q_MG, 0, 0},
+{0, V_P_EG, V_N_EG, V_B_EG, V_R_EG, V_Q_EG, 0, 0,
+0, V_P_EG, V_N_EG, V_B_EG, V_R_EG, V_Q_EG, 0, 0},
+};
 
 #ifndef NN_SCALE
 #define NN_SCALE 400.0f

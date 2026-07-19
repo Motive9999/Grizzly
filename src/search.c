@@ -1,3 +1,26 @@
+/*
+
+* Grizzly — a UCI chess engine with NNUE evaluation
+*
+* Copyright (C) 2026 Motive9999
+*
+* Derived from Stash, a UCI chess engine developed by Morgan Houppin.
+* Copyright (C) 2019–2025 Morgan Houppin
+*
+* This program is free software: you may redistribute it and/or modify
+* it under the terms of the GNU General Public License, version 3,
+* as published by the Free Software Foundation.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+* GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License
+* along with this program. If not, see https://www.gnu.org/licenses/.
+  */
+
+
 #include "defs.h"
 
 #define SEARCH_DEPTH         32
@@ -521,13 +544,13 @@ bool                cut) {
         if (!root && !found && depth >= 3)
                 --depth;
 
+
         // Move loop
 move_loop:
         movepicker_setup(&mp, false, b, w, ttMove, ss);
         move_t best = NO_MOVE;
         move_t m;
         move_t pv[256];
-
         int    moves = 0;
         int    qc    = 0;
         int    cc    = 0;
