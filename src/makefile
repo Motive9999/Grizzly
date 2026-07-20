@@ -12,10 +12,11 @@ CC = gcc
 #   move.c  - Move generation
 #   search.c    - Search algorithm + move picker + history
 #   tt.c        - Transposition table
-#   worker.c    - Worker pool + time management + iterative deepening
+#   worker.c    - Worker pool + iterative deepening
+#   timeman.c   - Time management
 #   uci.c       - UCI protocol + option handling
 
-SOURCES 	= board.c main.c move.c nn.c tt.c search.c worker.c uci.c
+SOURCES 	= board.c main.c move.c nn.c tt.c search.c worker.c timeman.c uci.c
 
 # Object files
 OBJECTS = $(SOURCES:.c=.o)

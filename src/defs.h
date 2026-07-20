@@ -919,7 +919,6 @@ typedef enum {
 } bestmove_type_t;
 
 extern const double BestmoveTypeScale[BM_TYPE_NB];
-extern const double BestmoveStabilityScale[5];
 
 typedef enum { Tournament, Movetime, NoTimeman } timeman_mode_t;
 
