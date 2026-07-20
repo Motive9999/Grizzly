@@ -153,15 +153,33 @@ int                                    cc) {
 }
 
 static void rank_captures(Movepicker *mp, ExtendedMove *bg, ExtendedMove *ed) {
-        static const score_t victim[PIECETYPE_NB] = {0, 0, 640, 640, 1280, 2560, 0, 0};
-        while (bg < ed) {
-                move_t      m   = bg->move;
-                square_t    to  = to_sq(m);
-                piece_t     pc  = piece_on(mp->board, from_sq(m));
-                piecetype_t cap = cap_type(mp->board, m);
-                bg->score       = victim[cap];
-                bg->score += get_cap_history_score(mp->worker->capHistory, pc, to, cap);
-                ++bg;
+        static const score_t value[PIECETYPE_NB] = {
+                0, 100, 320, 330, 500, 950, 20000, 0
+        };
+
+        for (; bg < ed; ++bg) {
+                move_t      m        = bg->move;
+                square_t    from     = from_sq(m);
+                square_t    to       = to_sq(m);
+                piece_t     pc       = piece_on(mp->board, from);
+                piecetype_t attacker = piece_type(pc);
+                piecetype_t victim;
+
+                if (move_type(m) == EN_PASSANT)
+                        victim = PAWN;
+                else if (piece_on(mp->board, to))
+                        victim = piece_type(piece_on(mp->board, to));
+                else
+                        victim = NO_PIECETYPE;
+
+                bg->score = 16384
+                          + value[victim] * 16
+                          - value[attacker]
+                          + get_cap_history_score(
+                                    mp->worker->capHistory,
+                                    pc,
+                                    to,
+                                    cap_type(mp->board, m));
         }
 }
 
@@ -551,6 +569,7 @@ move_loop:
         move_t best = NO_MOVE;
         move_t m;
         move_t pv[256];
+
         int    moves = 0;
         int    qc    = 0;
         int    cc    = 0;
