@@ -196,11 +196,28 @@ void cyclic_init(void) {
                                                 to);
 }
 
-#define FEN_ERR(msg)                                                                     \
-        do {                                                                             \
-                debug_printf("info error Invalid FEN: " msg "\n");                       \
-                return -1;                                                               \
-        } while (0)
+static int fen_error(const char *message) {
+        debug_printf("info error Invalid FEN: %s\n", message);
+        return -1;
+}
+
+static const char *fen_next(const char *fen, size_t length) {
+        fen += length;
+        return fen + strspn(fen, Delimiters);
+}
+
+static int
+fen_long(const char **fen, long min, long max, const char *field, long *value) {
+        char        *end;
+        const size_t length = strcspn(*fen, Delimiters);
+
+        *value = strtol(*fen, &end, 10);
+        if (*fen + length != end || *value < min || *value > max)
+                return fen_error(field);
+
+        *fen = fen_next(*fen, length);
+        return 0;
+}
 
 static int board_parse_fen_pieces(Board *b, const char *fen) {
         Square sq      = SQ_A8;
@@ -211,42 +228,43 @@ static int board_parse_fen_pieces(Board *b, const char *fen) {
                 if (c >= '1' && c <= '8') {
                         sq += c - '0';
                         if (sq_rank(sq - 1) > curRank)
-                                FEN_ERR("too many squares on rank");
+                                return fen_error("too many squares on rank");
                 } else if (c == '/') {
                         if (sq != create_sq(FILE_A, curRank + 1))
-                                FEN_ERR("incomplete rank");
+                                return fen_error("incomplete rank");
                         if (curRank == RANK_1)
-                                FEN_ERR("too many ranks");
+                                return fen_error("too many ranks");
                         sq += 2 * SOUTH;
                         --curRank;
                 } else {
                         const char *p = strchr(PieceIndexes, c);
                         if (!p)
-                                FEN_ERR("invalid character");
+                                return fen_error("invalid character");
                         if (sq_rank(sq) > curRank)
-                                FEN_ERR("too many squares on rank");
+                                return fen_error("too many squares on rank");
                         put_piece(b, (Piece)(p - PieceIndexes), sq++);
                 }
         }
         if (curRank != RANK_1)
-                FEN_ERR("missing ranks");
+                return fen_error("missing ranks");
         if (sq_file(sq) != FILE_A)
-                FEN_ERR("incomplete last rank");
+                return fen_error("incomplete last rank");
         if (b->pieceCount[WHITE_KING] != 1 || b->pieceCount[BLACK_KING] != 1)
-                FEN_ERR("invalid number of Kings");
+                return fen_error("invalid number of Kings");
         if (SquareDistance[get_king_square(b, WHITE)][get_king_square(b, BLACK)] == 1)
-                FEN_ERR("Kings adjacent");
+                return fen_error("Kings adjacent");
         if (piecetype_bb(b, PAWN) & (RANK_1_BB | RANK_8_BB))
-                FEN_ERR("Pawns on back ranks");
+                return fen_error("Pawns on back ranks");
         return (int)next;
 }
 
 static int board_set_castling(Board *b, Color c, Square rookSq) {
         const Square kingSq   = get_king_square(b, c);
+        const bool   kingside = kingSq < rookSq;
         const int    castling = (c == WHITE ? WHITE_CASTLING : BLACK_CASTLING) &
-        (kingSq < rookSq ? KINGSIDE_CASTLING : QUEENSIDE_CASTLING);
+        (kingside ? KINGSIDE_CASTLING : QUEENSIDE_CASTLING);
         if (relative_sq_rank(kingSq, c) != RANK_1)
-                FEN_ERR("castling with king not on back-rank");
+                return fen_error("castling with king not on back-rank");
         if (sq_file(kingSq) != FILE_E ||
         (sq_file(rookSq) != FILE_A && sq_file(rookSq) != FILE_H))
                 b->chess960 = true;
@@ -254,12 +272,8 @@ static int board_set_castling(Board *b, Color c, Square rookSq) {
         b->castlingMask[kingSq] |= castling;
         b->castlingMask[rookSq] |= castling;
         b->castlingRookSquare[castling] = rookSq;
-        const Square kingAfter = relative_sq((castling & KINGSIDE_CASTLING) ? SQ_G1
-                                                                            : SQ_C1,
-        c);
-        const Square rookAfter = relative_sq((castling & KINGSIDE_CASTLING) ? SQ_F1
-                                                                            : SQ_D1,
-        c);
+        const Square kingAfter          = relative_sq(kingside ? SQ_G1 : SQ_C1, c);
+        const Square rookAfter          = relative_sq(kingside ? SQ_F1 : SQ_D1, c);
         b->castlingPath[castling] = (between_bb(rookSq, rookAfter) |
                                     between_bb(kingSq, kingAfter) | square_bb(rookAfter) |
                                     square_bb(kingAfter)) &
@@ -272,27 +286,26 @@ static int board_parse_castling(Board *b, const char *fen) {
         for (size_t i = 0; i < next; ++i) {
                 if (fen[i] == '-') {
                         if (next > 1)
-                                FEN_ERR("'-' with extra castling characters");
+                                return fen_error("'-' with extra castling characters");
                         break;
                 }
                 Square      rookSq;
                 const Color side = islower((unsigned char)fen[i]) ? BLACK : WHITE;
                 const Piece rook = create_piece(side, ROOK);
                 const char  cc   = toupper((unsigned char)fen[i]);
-                if (cc == 'K') {
-                        for (rookSq = relative_sq(SQ_H1, side); sq_file(rookSq) != FILE_A;
-                        --rookSq)
-                                if (piece_on(b, rookSq) == rook)
-                                        break;
-                } else if (cc == 'Q') {
-                        for (rookSq = relative_sq(SQ_A1, side); sq_file(rookSq) != FILE_H;
-                        ++rookSq)
+                if (cc == 'K' || cc == 'Q') {
+                        const bool      kingside = cc == 'K';
+                        const File      edge     = kingside ? FILE_A : FILE_H;
+                        const Direction step     = kingside ? WEST : EAST;
+                        for (rookSq = relative_sq(kingside ? SQ_H1 : SQ_A1, side);
+                        sq_file(rookSq) != edge;
+                        rookSq += step)
                                 if (piece_on(b, rookSq) == rook)
                                         break;
                 } else if (cc >= 'A' && cc <= 'H') {
                         rookSq = create_sq(cc - 'A', relative_rank(RANK_1, side));
                 } else {
-                        FEN_ERR("invalid castling character");
+                        return fen_error("invalid castling character");
                 }
                 if (board_set_castling(b, side, rookSq) < 0)
                         return -1;
@@ -304,24 +317,22 @@ static int board_parse_en_passant(Board *b, const char *fen) {
         size_t next               = strcspn(fen, Delimiters);
         b->stack->enPassantSquare = SQ_NONE;
         if (next == 1 && *fen != '-')
-                FEN_ERR("invalid en-passant");
+                return fen_error("invalid en-passant");
         if (next > 2)
-                FEN_ERR("invalid en-passant format");
+                return fen_error("invalid en-passant format");
         if (next <= 1)
                 return (int)next;
         const char fc = fen[0], rc = fen[1];
         if (fc < 'a' || fc > 'h' || rc != (b->sideToMove == WHITE ? '6' : '3'))
-                FEN_ERR("invalid en-passant square");
+                return fen_error("invalid en-passant square");
         const Square epSq = create_sq(fc - 'a', rc - '1');
         const Color  us = b->sideToMove, them = not_color(us);
         if (!(piece_bb(b, them, PAWN) & square_bb(epSq + pawn_direction(them))))
-                FEN_ERR("en-passant without pawn");
+                return fen_error("en-passant without pawn");
         if (attackers_to(b, epSq) & piece_bb(b, us, PAWN))
                 b->stack->enPassantSquare = epSq;
         return (int)next;
 }
-
-#define FEN_NEXT(fen, r) ((fen) += (r) + strspn((fen) + (r), Delimiters))
 
 int board_from_fen(Board *b, const char *fen, bool is960, Boardstack *bs) {
         memset(b, 0, sizeof(Board));
@@ -332,21 +343,21 @@ int board_from_fen(Board *b, const char *fen, bool is960, Boardstack *bs) {
         int r;
         if ((r = board_parse_fen_pieces(b, fen)) < 0)
                 return r;
-        FEN_NEXT(fen, r);
-        r = strcspn(fen, Delimiters);
+        fen = fen_next(fen, r);
+        r   = strcspn(fen, Delimiters);
         if (r > 1)
-                FEN_ERR("invalid side to move");
+                return fen_error("invalid side to move");
         if (*fen == 'b')
                 b->sideToMove = BLACK;
         else if (*fen != 'w' && *fen != '\0')
-                FEN_ERR("invalid side to move character");
-        FEN_NEXT(fen, r);
+                return fen_error("invalid side to move character");
+        fen = fen_next(fen, r);
         if (attackers_to(b, get_king_square(b, not_color(b->sideToMove))) &
         color_bb(b, b->sideToMove))
-                FEN_ERR("opposite King in check");
+                return fen_error("opposite King in check");
         if ((r = board_parse_castling(b, fen)) < 0)
                 return r;
-        FEN_NEXT(fen, r);
+        fen = fen_next(fen, r);
         if (!is960 && b->chess960)
                 debug_printf("info string Warning: FRC position without "
                              "UCI_Chess960 "
@@ -354,30 +365,23 @@ int board_from_fen(Board *b, const char *fen, bool is960, Boardstack *bs) {
         b->chess960 = is960;
         if ((r = board_parse_en_passant(b, fen)) < 0)
                 return r;
-        FEN_NEXT(fen, r);
+        fen = fen_next(fen, r);
 
-        char  *ptr;
-        size_t next = strcspn(fen, Delimiters);
-        long   r50  = strtol(fen, &ptr, 10);
-        if (fen + next != ptr || r50 < -1024 || r50 > 1024)
-                FEN_ERR("invalid rule50");
+        long r50, moveNum;
+        if (fen_long(&fen, -1024, 1024, "invalid rule50", &r50) < 0 ||
+        fen_long(&fen, 0, 2048, "invalid move number", &moveNum) < 0)
+                return -1;
         b->stack->rule50 = r50;
-        fen += next + strspn(fen + next, Delimiters);
-
-        next         = strcspn(fen, Delimiters);
-        long moveNum = strtol(fen, &ptr, 10);
-        if (fen + next != ptr || moveNum < 0 || moveNum > 2048)
-                FEN_ERR("invalid move number");
-        b->ply = imax(0, 2 * ((int)moveNum - 1)) + (b->sideToMove == BLACK);
+        b->ply           = imax(0, 2 * ((int)moveNum - 1)) + (b->sideToMove == BLACK);
 
         set_boardstack(b, b->stack);
         if (popcount(b->stack->checkers) > 2)
-                FEN_ERR(">2 checkers");
+                return fen_error(">2 checkers");
         return 0;
 }
 
 void set_boardstack(Board *b, Boardstack *s) {
-        s->boardKey = s->pawnKey = b->stack->materialKey = 0;
+        s->boardKey = s->pawnKey = s->materialKey = 0;
         s->material[WHITE] = s->material[BLACK] = 0;
         s->checkers = attackers_to(b, get_king_square(b, b->sideToMove)) &
         color_bb(b, not_color(b->sideToMove));
@@ -490,26 +494,29 @@ const char *board_fen(const Board *b) {
 }
 
 void do_move_gc(Board *restrict b, Move m, Boardstack *restrict next, bool gc) {
-        next->castlings         = b->stack->castlings;
-        next->rule50            = b->stack->rule50;
-        next->pliesFromNullMove = b->stack->pliesFromNullMove;
-        next->enPassantSquare   = b->stack->enPassantSquare;
-        next->pawnKey           = b->stack->pawnKey;
-        next->materialKey       = b->stack->materialKey;
-        next->material[WHITE]   = b->stack->material[WHITE];
-        next->material[BLACK]   = b->stack->material[BLACK];
+        const Boardstack *prev  = b->stack;
+        next->castlings         = prev->castlings;
+        next->rule50            = prev->rule50;
+        next->pliesFromNullMove = prev->pliesFromNullMove;
+        next->enPassantSquare   = prev->enPassantSquare;
+        next->pawnKey           = prev->pawnKey;
+        next->materialKey       = prev->materialKey;
+        next->material[WHITE]   = prev->material[WHITE];
+        next->material[BLACK]   = prev->material[BLACK];
         next->prev              = b->stack;
-        HashKey key             = b->stack->boardKey ^ ZobristSideToMove;
-        b->stack                = next;
+
+        HashKey key = prev->boardKey ^ ZobristSideToMove;
+        b->stack    = next;
         b->ply += 1;
-        b->stack->rule50 += 1;
-        b->stack->pliesFromNullMove += 1;
+        next->rule50 += 1;
+        next->pliesFromNullMove += 1;
+
         const Color us = b->sideToMove, them = not_color(us);
         Square      from = from_sq(m), to = to_sq(m);
-        const Piece pc  = piece_on(b, from);
-        Piece       cap = move_type(m) == EN_PASSANT ? create_piece(them, PAWN)
-                                                     : piece_on(b, to);
-        if (move_type(m) == CASTLING) {
+        const Piece pc   = piece_on(b, from);
+        const int   type = move_type(m);
+        Piece       cap = type == EN_PASSANT ? create_piece(them, PAWN) : piece_on(b, to);
+        if (type == CASTLING) {
                 Square rookFrom, rookTo;
                 do_castling(b, us, from, &to, &rookFrom, &rookTo);
                 key ^= ZobristPsq[cap][rookFrom] ^ ZobristPsq[cap][rookTo];
@@ -518,65 +525,63 @@ void do_move_gc(Board *restrict b, Move m, Boardstack *restrict next, bool gc) {
         if (cap) {
                 Square capSq = to;
                 if (piece_type(cap) == PAWN) {
-                        if (move_type(m) == EN_PASSANT)
+                        if (type == EN_PASSANT)
                                 capSq -= pawn_direction(us);
-                        b->stack->pawnKey ^= ZobristPsq[cap][capSq];
+                        next->pawnKey ^= ZobristPsq[cap][capSq];
                 } else
-                        b->stack->material[them] -= PieceScores[MIDGAME][cap];
+                        next->material[them] -= PieceScores[MIDGAME][cap];
                 remove_piece(b, capSq);
-                if (move_type(m) == EN_PASSANT)
+                if (type == EN_PASSANT)
                         b->table[capSq] = NO_PIECE;
                 key ^= ZobristPsq[cap][capSq];
-                b->stack->materialKey ^= ZobristPsq[cap][b->pieceCount[cap]];
-                b->stack->rule50 = 0;
+                next->materialKey ^= ZobristPsq[cap][b->pieceCount[cap]];
+                next->rule50 = 0;
         }
         key ^= ZobristPsq[pc][from] ^ ZobristPsq[pc][to];
-        if (b->stack->enPassantSquare != SQ_NONE) {
-                key ^= ZobristEnPassant[sq_file(b->stack->enPassantSquare)];
-                b->stack->enPassantSquare = SQ_NONE;
+        if (next->enPassantSquare != SQ_NONE) {
+                key ^= ZobristEnPassant[sq_file(next->enPassantSquare)];
+                next->enPassantSquare = SQ_NONE;
         }
-        if (b->stack->castlings && (b->castlingMask[from] | b->castlingMask[to])) {
+        if (next->castlings && (b->castlingMask[from] | b->castlingMask[to])) {
                 const int c = b->castlingMask[from] | b->castlingMask[to];
-                key ^= ZobristCastling[b->stack->castlings & c];
-                b->stack->castlings &= ~c;
+                key ^= ZobristCastling[next->castlings & c];
+                next->castlings &= ~c;
         }
-        if (move_type(m) != CASTLING)
+        if (type != CASTLING)
                 move_piece(b, from, to);
         if (piece_type(pc) == PAWN) {
                 if ((to ^ from) == 16 &&
                 (pawn_moves(to - pawn_direction(us), us) & piece_bb(b, them, PAWN))) {
-                        b->stack->enPassantSquare = to - pawn_direction(us);
-                        key ^= ZobristEnPassant[sq_file(b->stack->enPassantSquare)];
-                } else if (move_type(m) == PROMOTION) {
+                        next->enPassantSquare = to - pawn_direction(us);
+                        key ^= ZobristEnPassant[sq_file(next->enPassantSquare)];
+                } else if (type == PROMOTION) {
                         const Piece newPc = create_piece(us, promotion_type(m));
                         remove_piece(b, to);
                         put_piece(b, newPc, to);
                         key ^= ZobristPsq[pc][to] ^ ZobristPsq[newPc][to];
-                        b->stack->pawnKey ^= ZobristPsq[pc][to];
-                        b->stack->material[us] += PieceScores[MIDGAME][promotion_type(m)];
-                        b->stack
-                        ->materialKey ^= ZobristPsq[newPc][b->pieceCount[newPc] - 1];
-                        b->stack->materialKey ^= ZobristPsq[pc][b->pieceCount[pc]];
+                        next->pawnKey ^= ZobristPsq[pc][to];
+                        next->material[us] += PieceScores[MIDGAME][promotion_type(m)];
+                        next->materialKey ^= ZobristPsq[newPc][b->pieceCount[newPc] - 1];
+                        next->materialKey ^= ZobristPsq[pc][b->pieceCount[pc]];
                 }
-                b->stack->pawnKey ^= ZobristPsq[pc][from] ^ ZobristPsq[pc][to];
-                b->stack->rule50 = 0;
+                next->pawnKey ^= ZobristPsq[pc][from] ^ ZobristPsq[pc][to];
+                next->rule50 = 0;
         }
-        b->stack->capturedPiece = cap;
-        b->stack->boardKey      = key;
+        next->capturedPiece = cap;
+        next->boardKey      = key;
         prefetch(tt_entry_at(key));
-        b->stack->checkers = gc
-        ? attackers_to(b, get_king_square(b, them)) & color_bb(b, us)
-        : 0;
-        b->sideToMove      = not_color(b->sideToMove);
-        set_check(b, b->stack);
-        b->stack->repetition = 0;
-        const int repPlies   = imin(b->stack->rule50, b->stack->pliesFromNullMove);
+        next->checkers = gc ? attackers_to(b, get_king_square(b, them)) & color_bb(b, us)
+                            : 0;
+        b->sideToMove  = not_color(b->sideToMove);
+        set_check(b, next);
+        next->repetition   = 0;
+        const int repPlies = imin(next->rule50, next->pliesFromNullMove);
         if (repPlies >= 4) {
                 Boardstack *rw = b->stack->prev->prev;
                 for (int i = 4; i <= repPlies; i += 2) {
                         rw = rw->prev->prev;
-                        if (rw->boardKey == b->stack->boardKey) {
-                                b->stack->repetition = rw->repetition ? -i : i;
+                        if (rw->boardKey == next->boardKey) {
+                                next->repetition = rw->repetition ? -i : i;
                                 break;
                         }
                 }
@@ -587,18 +592,19 @@ void undo_move(Board *b, Move m) {
         b->sideToMove    = not_color(b->sideToMove);
         const Color us   = b->sideToMove;
         Square      from = from_sq(m), to = to_sq(m);
-        if (move_type(m) == PROMOTION) {
+        const int   type = move_type(m);
+        if (type == PROMOTION) {
                 remove_piece(b, to);
                 put_piece(b, create_piece(us, PAWN), to);
         }
-        if (move_type(m) == CASTLING) {
+        if (type == CASTLING) {
                 Square rf, rt;
                 undo_castling(b, us, from, &to, &rf, &rt);
         } else {
                 move_piece(b, to, from);
                 if (b->stack->capturedPiece) {
                         Square capSq = to;
-                        if (move_type(m) == EN_PASSANT)
+                        if (type == EN_PASSANT)
                                 capSq -= pawn_direction(us);
                         put_piece(b, b->stack->capturedPiece, capSq);
                 }
@@ -614,10 +620,10 @@ Square *restrict kt,
 Square *restrict rf,
 Square *restrict rt,
 bool undo) {
-        const bool ks = *kt > kf;
-        *rf           = *kt;
-        *rt           = relative_sq(ks ? SQ_F1 : SQ_D1, us);
-        *kt           = relative_sq(ks ? SQ_G1 : SQ_C1, us);
+        const bool ks      = *kt > kf;
+        *rf                = *kt;
+        *rt                = relative_sq(ks ? SQ_F1 : SQ_D1, us);
+        *kt                = relative_sq(ks ? SQ_G1 : SQ_C1, us);
         const Square fromK = undo ? *kt : kf, fromR = undo ? *rt : *rf;
         const Square toK = undo ? kf : *kt, toR = undo ? *rf : *rt;
         remove_piece(b, fromK);
@@ -703,7 +709,7 @@ bool game_is_drawn(const Board *b, int ply) {
                         return true;
                 Movelist ml;
                 list_all(&ml, b);
-                if (movelist_size(&ml) != 0)
+                if (movelist_size(&ml))
                         return true;
         }
         return !!b->stack->repetition && b->stack->repetition < ply;
